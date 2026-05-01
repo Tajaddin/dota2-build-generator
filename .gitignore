@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Large data files — not tracked in git
+data/archive/
+data/heroes/
+data/opendota/
+data/*.json
+data/*.parquet
+data/*.csv
+
+# ML raw/processed data
+ml/raw_data/
+ml/processed/
+
+# Model checkpoints
+models/*.pkl
+models/*.pth
+models/*.pt
+*.pkl
+*.pth
+
+# Auto-downloaded assets
+assets/hero_icons/
+assets/item_icons/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+*.swp
+
+# Claude internal
+.claude/
