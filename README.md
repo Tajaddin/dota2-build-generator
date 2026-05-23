@@ -81,11 +81,15 @@ Skip the API entirely with a JSONL file:
 python -m ml.train --from-file path/to/matches.jsonl --skip-collect --epochs 20
 ```
 
-## Setup
+## How to run
 
-```
-pip install torch xgboost scikit-learn pandas numpy customtkinter requests flask
-python main.py
+Prerequisites: Python 3.11+ (CPU works for inference; trained pickle artifacts are loaded with SHA256 verification, see `MODEL_HASHES` in `logic/ai_recommender.py`).
+
+```bash
+pip install -r requirements.txt
+pip install pytest
+pytest -q                       # logic tests (21 currently pass; some are dataset-gated)
+python main.py                  # launches the overlay (Browse mode first run)
 ```
 
 The first run launches in Browse mode. Live mode needs the GSI cfg, which the installer writes on first launch of the overlay.
