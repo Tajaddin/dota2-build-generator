@@ -11,7 +11,9 @@ Primary approach: Stats-first
 Fallback: If hero stats are unavailable for a hero, falls back to the old
 XGBoost-only prediction (less accurate but still functional).
 """
+import hashlib
 import json
+import logging
 import pickle
 import numpy as np
 import torch
@@ -21,6 +23,44 @@ from typing import Optional
 from ml.embedding_model import DotaEmbeddingModel
 from ml.id_mapper import IDMapper
 from logic.item_recommender import ItemRecommender
+
+logger = logging.getLogger(__name__)
+
+# SHA256 hashes of model artifacts shipped or vetted by the project. Populate
+# this when you commit a model file or pin a downloadable build. Keys are the
+# artifact filename (basename, not full path).
+#
+# Example:
+#   MODEL_HASHES = {"xgb_early.pkl": "abc123..."}
+#
+# The loader will refuse to deserialize a pickle whose hash does not match a
+# value here, since pickle deserialization is arbitrary-code-execution by
+# design. Files not listed here are treated as BYOM (bring-your-own-model);
+# they are loaded but a security warning is logged so the risk is visible.
+MODEL_HASHES: dict[str, str] = {}
+
+
+def _verified_pickle_load(path: Path):
+    """Open and unpickle `path` only after SHA256 verification (if a hash is
+    registered in MODEL_HASHES). Raises ValueError on hash mismatch."""
+    raw = path.read_bytes()
+    expected = MODEL_HASHES.get(path.name)
+    if expected is not None:
+        actual = hashlib.sha256(raw).hexdigest()
+        if actual != expected:
+            raise ValueError(
+                f"Refusing to unpickle {path}: SHA256 {actual} does not match "
+                f"the registered value {expected} in MODEL_HASHES. The file may "
+                f"have been tampered with."
+            )
+    else:
+        logger.warning(
+            "Loading %s without SHA256 verification (no entry in MODEL_HASHES). "
+            "Pickle deserialization runs arbitrary code; only load files you "
+            "trained or vetted yourself.",
+            path,
+        )
+    return pickle.loads(raw)
 
 # Items that should never be recommended (event items, recipes, non-purchasable)
 BLOCKED_ITEM_PREFIXES = ("recipe_",)
@@ -140,8 +180,7 @@ class AIRecommender:
             for phase in ["draft", "early", "mid", "late"]:
                 pkl_path = self.model_dir / f"xgb_{phase}.pkl"
                 if pkl_path.exists():
-                    with open(pkl_path, "rb") as f:
-                        self._xgb_models[phase] = pickle.load(f)
+                    self._xgb_models[phase] = _verified_pickle_load(pkl_path)
 
             if self._xgb_models:
                 self._force_xgb_cpu_inference()
