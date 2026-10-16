@@ -1,9 +1,11 @@
 """Tests for data_loader module."""
 
 from logic.data_loader import DataLoader
+from tests._dataset import requires_dataset
 
 
 class TestDataLoader:
+    @requires_dataset
     def test_load_all_heroes(self):
         loader = DataLoader()
         heroes = loader.get_all_heroes()
@@ -11,18 +13,21 @@ class TestDataLoader:
         assert all("id" in h for h in heroes)
         assert all("name" in h for h in heroes)
 
+    @requires_dataset
     def test_load_hero_by_id(self):
         loader = DataLoader()
         hero = loader.get_hero("anti_mage")
         assert hero["name"] == "Anti-Mage"
         assert len(hero["builds"]) >= 2
 
+    @requires_dataset
     def test_load_items(self):
         loader = DataLoader()
         items = loader.get_all_items()
         assert "bfury" in items
         assert items["bfury"]["name"] == "Battle Fury"
 
+    @requires_dataset
     def test_get_heroes_by_role(self):
         loader = DataLoader()
         carries = loader.get_heroes_by_role("Carry")
@@ -32,6 +37,7 @@ class TestDataLoader:
         supports = loader.get_heroes_by_role("Support")
         assert len(supports) >= 15
 
+    @requires_dataset
     def test_hero_build_has_required_fields(self):
         loader = DataLoader()
         hero = loader.get_hero("anti_mage")
@@ -46,6 +52,7 @@ class TestDataLoader:
         assert len(build["mid_game"]) == 6
         assert len(build["late_game"]) == 6
 
+    @requires_dataset
     def test_synthesizes_missing_heroes_from_bundled_stats(self):
         loader = DataLoader()
         hero = loader.get_hero("necrophos")

@@ -1,6 +1,7 @@
 """Tests for GSI data parser."""
 
 from logic.gsi_parser import GSIParser
+from tests._dataset import requires_dataset
 
 
 class TestGSIParser:
@@ -36,6 +37,7 @@ class TestGSIParser:
         assert result["game_time"] == 600
         assert result["my_items"] == ["power_treads", "dragon_lance"]
 
+    @requires_dataset
     def test_parse_hero_name_strips_prefix_and_maps(self):
         gsi_data = {
             "map": {"game_state": "DOTA_GAMERULES_STATE_GAME_IN_PROGRESS"},
@@ -46,6 +48,7 @@ class TestGSIParser:
         assert result["my_hero"] == "shadow_fiend"
         assert result["my_hero_valve"] == "nevermore"
 
+    @requires_dataset
     def test_parse_draft_team_blocks(self):
         gsi_data = {
             "draft": {
@@ -61,6 +64,7 @@ class TestGSIParser:
         assert "drow_ranger" in allies
         assert "nevermore" in enemies
 
+    @requires_dataset
     def test_parse_all_players(self):
         gsi_data = {
             "allplayers": {
@@ -89,6 +93,7 @@ class TestGSIParser:
         assert "carry" in parsed["allies"][0].get("role_tags", [])
         assert parsed["enemies"][0]["items"] == ["blink", "aether_lens"]
 
+    @requires_dataset
     def test_parse_draft_from_allheroes_is_stable_when_slots_are_unsorted(self):
         gsi_data = {
             "allheroes": {

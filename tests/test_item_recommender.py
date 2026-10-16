@@ -1,12 +1,14 @@
 """Tests for item recommender."""
 
 from logic.item_recommender import ItemRecommender
+from tests._dataset import requires_dataset
 
 
 class TestItemRecommender:
     def setup_method(self):
         self.recommender = ItemRecommender("data")
 
+    @requires_dataset
     def test_recommend_returns_required_fields(self):
         rec = self.recommender.recommend(
             my_hero="drow_ranger",
@@ -27,6 +29,7 @@ class TestItemRecommender:
         assert len(rec["mid_game"]) == 2
         assert len(rec["late_game"]) <= 2
 
+    @requires_dataset
     def test_recommend_accepts_valve_hero_id(self):
         rec = self.recommender.recommend(
             my_hero="nevermore",
@@ -74,6 +77,7 @@ class TestItemRecommender:
         assert owned.isdisjoint(mid_ids)
         assert owned.isdisjoint(late_ids)
 
+    @requires_dataset
     def test_recommend_discloses_auto_generated_hero_profile(self):
         rec = self.recommender.recommend(
             my_hero="necrophos",
@@ -83,6 +87,7 @@ class TestItemRecommender:
         )
         assert any("auto-generated hero profile" in line for line in rec["reasoning"])
 
+    @requires_dataset
     def test_disable_heavy_necrophos_matchup_keeps_bkb_and_skips_mjollnir(self):
         rec = self.recommender.recommend(
             my_hero="necrophos",
@@ -96,6 +101,7 @@ class TestItemRecommender:
         assert "black_king_bar" in core_ids
         assert "mjollnir" not in core_ids
 
+    @requires_dataset
     def test_support_lean_mirana_avoids_greedy_carry_items(self):
         rec = self.recommender.recommend(
             my_hero="mirana",
@@ -132,6 +138,7 @@ class TestItemRecommender:
         late_ids = [item["item"] for item in late]
         assert "travel_boots" not in late_ids
 
+    @requires_dataset
     def test_pos5_caps_core_items_and_adds_detection_situational(self):
         rec = self.recommender.recommend(
             my_hero="shadow_shaman",
@@ -144,6 +151,7 @@ class TestItemRecommender:
         assert len(core_ids) <= 3
         assert any("Dust/Sentries" in line or "Gem" in line for line in rec["situational_swaps"])
 
+    @requires_dataset
     def test_pos1_antimage_avoids_support_utility_leaks(self):
         rec = self.recommender.recommend(
             my_hero="antimage",

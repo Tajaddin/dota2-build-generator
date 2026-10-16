@@ -5,6 +5,7 @@ from pathlib import Path
 
 from logic.match_lookup import MatchLookup
 import logic.match_lookup as match_lookup_module
+from tests._dataset import requires_dataset
 
 
 def _build_last_match_blob(match_id: int, players: list[dict]) -> bytes:
@@ -34,6 +35,7 @@ class TestMatchLookup:
     def setup_method(self):
         self.lookup = MatchLookup("data")
 
+    @requires_dataset
     def test_parse_local_last_match_bytes_extracts_teams(self):
         blob = _build_last_match_blob(
             8721855367,
@@ -68,6 +70,7 @@ class TestMatchLookup:
 
         assert parsed is None
 
+    @requires_dataset
     def test_parse_overwolf_controller_lines_extracts_current_match(self):
         lines = [
             "2026-03-09 02:13:52,956 (INFO) - matchStore: Processing roster for detected match with game mode AllDraft and hero pool undefined.",
@@ -91,6 +94,7 @@ class TestMatchLookup:
         ]
         assert result["complete"] is True
 
+    @requires_dataset
     def test_parse_overwolf_gep_lines_extracts_current_roster(self):
         lines = [
             '2026-03-09 02:13:52,900 (INFO) </libs/bundle.min.js> (:1) - [InfoDBContainer] UPDATING INFO (decoded): {"feature":"match_state_changed","category":"game","key":"match_state","value":"DOTA_GAMERULES_STATE_STRATEGY_TIME"}',
@@ -114,6 +118,7 @@ class TestMatchLookup:
         ]
         assert result["complete"] is True
 
+    @requires_dataset
     def test_parse_overwolf_gep_lines_ignores_other_match_ids(self):
         lines = [
             '2026-03-09 02:12:06,100 (INFO) </libs/bundle.min.js> (:1) - [InfoDBContainer] UPDATING INFO (decoded): {"feature":"match_info","category":"match_info","key":"pseudo_match_id","value":"111"}',
@@ -133,6 +138,7 @@ class TestMatchLookup:
         assert result["allies"] == ["lifestealer"]
         assert result["enemies"] == ["muerta"]
 
+    @requires_dataset
     def test_lookup_overwolf_roster_refreshes_when_logs_change(self, tmp_path, monkeypatch):
         controller_log = tmp_path / "controller.html.log"
         gep_log = tmp_path / "index.html.log"

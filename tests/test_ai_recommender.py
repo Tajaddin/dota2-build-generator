@@ -1,6 +1,7 @@
 """Tests for AI recommender normalization and filtering."""
 
 from logic.ai_recommender import AIRecommender
+from tests._dataset import requires_dataset
 
 
 class _FakeBooster:
@@ -33,10 +34,12 @@ class TestAIRecommender:
     def setup_method(self):
         self.recommender = AIRecommender("data", model_dir="missing-models")
 
+    @requires_dataset
     def test_normalize_hero_name_maps_valve_ids(self):
         assert self.recommender._normalize_hero_name("life_stealer") == "lifestealer"
         assert self.recommender._normalize_hero_name("nevermore") == "shadow_fiend"
 
+    @requires_dataset
     def test_normalize_hero_list_removes_self_and_duplicates(self):
         normalized = self.recommender._normalize_hero_list(
             ["life_stealer", "lifestealer", "zuus", "nevermore"],

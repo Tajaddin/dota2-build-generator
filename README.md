@@ -88,7 +88,7 @@ Prerequisites: Python 3.11+ (CPU works for inference; trained pickle artifacts a
 ```bash
 pip install -r requirements.txt
 pip install pytest
-pytest -q                       # logic tests (21 currently pass; some are dataset-gated)
+pytest -q                       # 21 pass on a fresh clone; 31 skip until data/ has the local hero dataset
 python main.py                  # launches the overlay (Browse mode first run)
 ```
 

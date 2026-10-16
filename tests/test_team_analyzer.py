@@ -1,12 +1,14 @@
 """Tests for team analyzer."""
 
 from logic.team_analyzer import TeamAnalyzer
+from tests._dataset import requires_dataset
 
 
 class TestTeamAnalyzer:
     def setup_method(self):
         self.analyzer = TeamAnalyzer("data")
 
+    @requires_dataset
     def test_analyze_team_strengths(self):
         result = self.analyzer.analyze_team(["axe", "lion", "tinker", "oracle", "drow_ranger"])
         assert "frontline" in result["has"]
@@ -14,11 +16,13 @@ class TestTeamAnalyzer:
         assert "save" in result["has"]
         assert "frontline" not in result["gaps"]
 
+    @requires_dataset
     def test_analyze_team_gaps(self):
         result = self.analyzer.analyze_team(["antimage", "drow_ranger", "tinker"])
         assert "frontline" in result["gaps"]
         assert "save" in result["gaps"]
 
+    @requires_dataset
     def test_summary_labels_are_human_readable(self):
         result = self.analyzer.analyze_team(["antimage", "drow_ranger", "tinker"])
         weaknesses = result["summary"]["weaknesses"]
