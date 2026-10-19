@@ -1,0 +1,33 @@
+{
+  "machine": {
+    "python": "3.12.12",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel"
+  },
+  "payloads": 2526,
+  "engine_ingest": {
+    "n": 2526,
+    "p50_ms": 0.344,
+    "p95_ms": 0.648,
+    "p99_ms": 0.833,
+    "max_ms": 92.12,
+    "mean_ms": 0.437
+  },
+  "gsi_http_round_trip": {
+    "n": 2526,
+    "p50_ms": 1.723,
+    "p95_ms": 2.273,
+    "p99_ms": 2.863,
+    "max_ms": 81.67,
+    "mean_ms": 1.833
+  },
+  "draft_analyze": {
+    "n": 300,
+    "p50_ms": 4.251,
+    "p95_ms": 6.216,
+    "p99_ms": 7.169,
+    "max_ms": 29.92,
+    "mean_ms": 4.409
+  },
+  "measured_at": "2026-10-19 05:43"
+}

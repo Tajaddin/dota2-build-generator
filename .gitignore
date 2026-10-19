@@ -38,3 +38,17 @@ Thumbs.db
 
 # Claude internal
 .claude/
+
+# API response caches
+data/cache/
+
+# v2 tooling and build output
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+src/d2bg/static/
+web/node_modules/
+web/test-results/
+web/playwright-report/
