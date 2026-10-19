@@ -312,7 +312,16 @@ export interface LiveSnapshot {
   };
   benchmarks?: { metric: string; label: string; value: number; percentile: number | null; median: number | null }[];
   lh_target?: { at_10: number; now: number; you: number; percentile: number | null };
-  draft?: { allies: number[]; enemies: number[]; side: Side; bans: number[] };
+  draft?: {
+    allies: number[];
+    enemies: number[];
+    side: Side;
+    side_known?: boolean;
+    bans: number[];
+    /** What the game itself supplied so far, by kind: you, bans, allies, enemies. */
+    sources?: Record<string, string>;
+    note?: string;
+  };
   situational_items?: SituationalRule[];
   enemy_threats?: { hero: number; traits: TraitView[]; countered_by: number[] }[];
   players?: {

@@ -15,6 +15,18 @@ test("live page plays the demo match", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "No game yet" })).toBeVisible({ timeout: 10_000 });
 });
 
+test("draft fills in from the game by itself", async ({ page, request }) => {
+  await request.post("/api/demo", { data: { hero: "juggernaut", speed: 4, minutes: 3 } });
+  await page.goto("/draft");
+  const status = page.getByRole("region", { name: "From the game" });
+  await expect(status).toContainText("your hero and team from the game", { timeout: 20_000 });
+  await expect(status).toContainText("ban announcements");
+  await expect(status).toContainText("does not send a player the other picks");
+  await expect(page.getByLabel("radiant picks").getByText("Juggernaut")).toBeVisible();
+  await expect(page.getByLabel("Bans").locator("button.ban")).toHaveCount(4);
+  await request.post("/api/live/reset");
+});
+
 test("draft by keyboard gives suggestions and a win estimate", async ({ page }) => {
   await page.goto("/draft");
   const search = page.getByLabel("Search heroes");
