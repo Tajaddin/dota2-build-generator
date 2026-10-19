@@ -146,7 +146,9 @@ def evaluate(rule: TimerRule, clock: float, state: TimerState) -> TimerView | No
         anchor = state.day_flip_at if state.day_flip_at is not None else 0.0
         estimated = state.day_flip_at is None
         nxt = anchor + period * (math.floor((max(clock, 0.0) - anchor) / period) + 1)
-        is_day = state.daytime if state.daytime is not None else (math.floor(max(clock, 0.0) / period) % 2 == 0)
+        is_day = (
+            state.daytime if state.daytime is not None else (math.floor(max(clock, 0.0) / period) % 2 == 0)
+        )
         detail = ("Night" if is_day else "Day") + f" at {fmt(nxt)}"
         return view(nxt, "estimated" if estimated else "upcoming", detail)
     if rule.times:

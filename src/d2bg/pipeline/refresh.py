@@ -153,10 +153,17 @@ class Refresher:
         write_json(self.out / "ids.json", {"items": raw["item_ids"], "abilities": raw["ability_ids"]})
         res.calls = self._calls_since(c0)
         res.rows = len(heroes)
-        res.files = ["heroes.json", "abilities.json", "items.json", "patches.json", "ids.json"]
-        for f in res.files:
+        counts = {
+            "heroes.json": len(heroes),
+            "abilities.json": len(transform.abilities_doc(raw["abilities"], heroes)),
+            "items.json": len(transform.items_doc(raw["items"])),
+            "patches.json": len(patches),
+            "ids.json": len(raw["item_ids"]) + len(raw["ability_ids"]),
+        }
+        res.files = list(counts)
+        for f, rows in counts.items():
             self._record(
-                f, "OpenDota /constants (dotaconstants, MIT)", res.rows, res.calls, patch=patches[-1]["name"]
+                f, "OpenDota /constants (dotaconstants, MIT)", rows, res.calls, patch=patches[-1]["name"]
             )
         return res
 

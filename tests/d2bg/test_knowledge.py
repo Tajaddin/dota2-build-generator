@@ -141,10 +141,15 @@ def test_similarity(data):
     assert len(sims) == 5 and all(-1 <= s <= 1 for _, s in sims) and all(h != 1 for h, _ in sims)
 
 
-@pytest.mark.parametrize(("hero", "trait"), [
-    ("crystal_maiden", Trait.ROOT), ("axe", Trait.TAUNT), ("legion_commander", Trait.TAUNT),
-    ("doom_bringer", Trait.SILENCE),
-])
+@pytest.mark.parametrize(
+    ("hero", "trait"),
+    [
+        ("crystal_maiden", Trait.ROOT),
+        ("axe", Trait.TAUNT),
+        ("legion_commander", Trait.TAUNT),
+        ("doom_bringer", Trait.SILENCE),
+    ],
+)
 def test_more_disables(shared_ctx, hero, trait):
     assert trait in shared_ctx.traits.of(shared_ctx.data.heroes.require(hero).id)
 

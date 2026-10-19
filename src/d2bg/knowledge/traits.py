@@ -118,7 +118,9 @@ _PLACEHOLDER = re.compile(r"replace this slot|slot will be replaced")
 
 
 def _visible(hero: Hero) -> list[Ability]:
-    return [a for a in hero.abilities if "Hidden" not in a.behavior and not _PLACEHOLDER.search(a.desc.lower())]
+    return [
+        a for a in hero.abilities if "Hidden" not in a.behavior and not _PLACEHOLDER.search(a.desc.lower())
+    ]
 
 
 def _affects_allies(a: Ability) -> bool:
