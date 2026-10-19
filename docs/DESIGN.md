@@ -69,7 +69,7 @@ that the safe channels allow.
 | D9 | Timer rules in a JSON file per patch, each rule citing the official patch note it comes from | Patch changes become a data edit, and every timer is traceable. |
 | D10 | GSI config written with a random per-install auth token; payloads with a wrong token are rejected | Stops other local programs from feeding the app fake state. |
 | D11 | Every GSI session can be recorded to gzip JSONL and replayed; a synthetic demo match ships for trying the app and for CI | He can test the whole live UI without launching Dota. |
-| D12 | API types generated from FastAPI's OpenAPI schema into the UI (`openapi-typescript`); CI fails if they drift | Backend and UI stay in sync. |
+| D12 | UI response types written by hand in `web/src/api/types.ts`; the Playwright suite runs the built UI against the real server in CI, so drift fails the build | Most routes return composed dictionaries, so generated OpenAPI types would be empty shells; an end-to-end run catches what matters. (Changed during the build from generated types.) |
 | D13 | Optional always-on-top compact window via `pywebview` (a separate OS window), never anything drawn inside the game | Same safety class as any window placed over a borderless game. |
 
 ## Architecture
