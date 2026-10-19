@@ -1,4 +1,4 @@
-"""Tests for ml/build_matchup_matrix.py on a 20-match hand-computed fixture.
+"""Tests for d2bg.pipeline.matchups on a 20-match hand-computed fixture.
 
 Fixture (teams are 2v2 so every number can be checked by hand):
 
@@ -10,24 +10,30 @@ Fixture (teams are 2v2 so every number can be checked by hand):
 
 Bucket 1-2, k=20: hero 1 is 5/10, hero 2 7/10, hero 3 3/10, hero 4 5/10.
 """
+
 import json
 
 import pytest
 
-from ml.build_matchup_matrix import (
-    PublicMatchesClient,
+from d2bg.pipeline.matchups import (
     bucket_for,
     build_matrix,
-    load_matrix,
+    collect_public_matches,
+    compact,
     normalize_match,
-    write_matrix,
+    read_page_dir,
 )
 
 
 def _m(i, radiant, dire, radiant_win, tier, start_time=None):
-    return {"match_id": 1000 + i, "radiant_team": radiant, "dire_team": dire,
-            "radiant_win": radiant_win, "avg_rank_tier": tier,
-            "start_time": start_time}
+    return {
+        "match_id": 1000 + i,
+        "radiant_team": radiant,
+        "dire_team": dire,
+        "radiant_win": radiant_win,
+        "avg_rank_tier": tier,
+        "start_time": start_time,
+    }
 
 
 def fixture_matches():
@@ -69,7 +75,7 @@ def test_bucketing_counts(doc):
 
 def test_base_wr_is_smoothed_toward_half(doc):
     heroes = doc["buckets"]["1-2"]["heroes"]
-    assert heroes["1"]["wr"] == pytest.approx(15 / 30)   # (5 + 10) / (10 + 20)
+    assert heroes["1"]["wr"] == pytest.approx(15 / 30)  # (5 + 10) / (10 + 20)
     assert heroes["2"]["wr"] == pytest.approx(17 / 30)
     assert heroes["3"]["wr"] == pytest.approx(13 / 30)
     assert heroes["4"]["wr"] == pytest.approx(15 / 30)
@@ -95,9 +101,9 @@ def test_pair_advantage_smoothed_toward_base_wr(doc):
 
 def test_pairs_below_threshold_are_null(doc):
     b = doc["buckets"]["1-2"]
-    assert b["vs"]["1"]["2"] is None       # 4 games < 5
-    assert b["with"]["1"]["3"] is None     # 4 games < 5
-    assert "1" not in b["vs"]["1"]         # a hero never faces itself
+    assert b["vs"]["1"]["2"] is None  # 4 games < 5
+    assert b["with"]["1"]["3"] is None  # 4 games < 5
+    assert "1" not in b["vs"]["1"]  # a hero never faces itself
 
 
 def test_default_threshold_nulls_everything_on_small_data():
@@ -109,11 +115,16 @@ def test_default_threshold_nulls_everything_on_small_data():
 
 
 def test_normalize_accepts_string_teams_and_jsonl_rows():
-    assert normalize_match({"radiant_team": "1,2", "dire_team": "3,4",
-                            "radiant_win": True})["radiant"] == [1, 2]
-    row = {"match_id": 5, "radiant_win": False, "avg_rank_tier": 44,
-           "players": [{"hero_id": 7, "is_radiant": True},
-                       {"hero_id": 8, "is_radiant": False}]}
+    assert normalize_match({"radiant_team": "1,2", "dire_team": "3,4", "radiant_win": True})["radiant"] == [
+        1,
+        2,
+    ]
+    row = {
+        "match_id": 5,
+        "radiant_win": False,
+        "avg_rank_tier": 44,
+        "players": [{"hero_id": 7, "is_radiant": True}, {"hero_id": 8, "is_radiant": False}],
+    }
     nm = normalize_match(row)
     assert nm["radiant"] == [7] and nm["dire"] == [8] and nm["avg_rank_tier"] == 44
     assert normalize_match({"radiant_team": [1], "dire_team": [2]}) is None
@@ -126,73 +137,70 @@ def test_source_week_from_newest_match():
     assert build_matrix(ms)["source_week"] == "2026-W42"
 
 
-def test_write_and_load_latest(tmp_path, doc):
-    from datetime import date
-    write_matrix(doc, tmp_path, date(2026, 10, 9))
-    p = write_matrix(doc, tmp_path, date(2026, 10, 16))
-    assert p.name == "2026-10-16.json"
-    loaded = load_matrix(out_dir=tmp_path)
-    assert loaded["buckets"]["1-2"]["vs"]["1"]["2"] is None
-    assert json.loads(p.read_text())["n_matches"] == 20
+def test_compact_rounds_and_keeps_nulls(doc):
+    small = compact(doc, digits=1)
+    vs = small["buckets"]["1-2"]["vs"]
+    assert vs["1"]["2"] is None
+    assert vs["1"]["3"] == round(doc["buckets"]["1-2"]["vs"]["1"]["3"], 1)
+    assert small["n_matches"] == doc["n_matches"]
 
 
-# ── Collector, with a fake HTTP layer ──────────────────────────────
+def test_read_page_dir_dedupes_newest_first(tmp_path):
+    (tmp_path / "lt_1.json").write_text(json.dumps([{"match_id": 5}, {"match_id": 7}]))
+    (tmp_path / "lt_2.json").write_text(json.dumps([{"match_id": 7}, {"match_id": 6}]))
+    (tmp_path / "bad.json").write_text("not json")
+    assert [r["match_id"] for r in read_page_dir(tmp_path)] == [7, 6, 5]
 
-class _Resp:
-    def __init__(self, status, rows=None):
-        self.status_code = status
-        self._rows = rows
 
-    def json(self):
-        return self._rows
+# ── Collector, with a fake client ──────────────────────────────────
+
+
+class FakeClient:
+    def __init__(self, pages):
+        self.pages = pages
+        self.calls = []
+
+    def get(self, path, params=None, ttl=None):
+        cursor = (params or {}).get("less_than_match_id")
+        self.calls.append((cursor, ttl))
+        return self.pages.get(cursor, [])
 
 
 def _row(mid, start, lobby=7, mode=22):
-    return {"match_id": mid, "start_time": start, "lobby_type": lobby,
-            "game_mode": mode, "radiant_team": [1], "dire_team": [2],
-            "radiant_win": True, "avg_rank_tier": 33}
+    return {
+        "match_id": mid,
+        "start_time": start,
+        "lobby_type": lobby,
+        "game_mode": mode,
+        "radiant_team": [1],
+        "dire_team": [2],
+        "radiant_win": True,
+        "avg_rank_tier": 33,
+    }
 
 
-def test_collector_pages_backwards_filters_and_caches(tmp_path):
+def test_collector_pages_backwards_and_filters():
     now = 2_000_000_000
     pages = {
         None: [_row(300, now), _row(299, now, lobby=0), _row(298, now)],
         298: [_row(297, now), _row(296, now, mode=1)],
         296: [_row(295, now - 20 * 86400)],  # older than the window -> stop
     }
-    calls, sleeps = [], []
-
-    def fake_get(url, params, timeout):
-        cursor = params.get("less_than_match_id")
-        calls.append(cursor)
-        if len(calls) == 2:
-            return _Resp(429)  # back off once, then retry
-        return _Resp(200, pages[cursor])
-
-    client = PublicMatchesClient(cache_dir=tmp_path, interval=0,
-                                 http_get=fake_get, sleep=sleeps.append)
-    rows = client.collect(max_calls=10, days=14, now=now)
+    client = FakeClient(pages)
+    rows = collect_public_matches(client, max_calls=10, days=14, now=now)
     assert [r["match_id"] for r in rows] == [300, 298, 297, 295]
-    assert calls == [None, 298, 298, 296]
-    assert 60 in sleeps
-
-    # Second run: older pages come from the cache, only the newest is refetched.
-    calls.clear()
-    client2 = PublicMatchesClient(cache_dir=tmp_path, interval=0,
-                                  http_get=lambda url, params, timeout: (
-                                      calls.append(params.get("less_than_match_id"))
-                                      or _Resp(200, pages[params.get("less_than_match_id")])),
-                                  sleep=lambda s: None)
-    assert len(client2.collect(max_calls=10, days=14, now=now)) == 4
-    assert calls == [None]
+    assert [c for c, _ in client.calls] == [None, 298, 296]
+    # The newest page is always fresh; older pages are cached for a long time.
+    assert client.calls[0][1] == 0 and client.calls[1][1] > 86400
 
 
-def test_collector_respects_max_calls(tmp_path):
-    def fake_get(url, params, timeout):
-        cursor = params.get("less_than_match_id") or 10_000
-        return _Resp(200, [_row(cursor - 1, 2_000_000_000)])
+def test_collector_respects_max_calls():
+    class Endless(FakeClient):
+        def get(self, path, params=None, ttl=None):
+            cursor = (params or {}).get("less_than_match_id") or 10_000
+            self.calls.append(cursor)
+            return [_row(cursor - 1, 2_000_000_000)]
 
-    client = PublicMatchesClient(cache_dir=tmp_path, interval=0,
-                                 http_get=fake_get, sleep=lambda s: None)
-    client.collect(max_calls=3, days=14, now=2_000_000_000)
-    assert client.requests_made == 3
+    client = Endless({})
+    collect_public_matches(client, max_calls=3, days=14, now=2_000_000_000)
+    assert len(client.calls) == 3

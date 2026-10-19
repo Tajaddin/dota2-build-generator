@@ -1,0 +1,32 @@
+{
+  "patch": "7.41f",
+  "verified": "2026-10-19",
+  "source": "Valve's official patch notes, https://www.dota2.com/datafeed/patchnotes?version=<v>&language=english",
+  "rules": [
+    {"id": "bounty_rune", "label": "Bounty runes", "first": 0, "interval": 240, "lead": 15,
+     "cite": "7.29: bounty runes spawn at minute 0; 7.38: spawn interval increased from 3 to 4 minutes"},
+    {"id": "water_rune", "label": "Water runes", "times": [120, 240], "lead": 10,
+     "cite": "7.29: Water Runes spawn at both power rune locations only at minute 2 and 4"},
+    {"id": "power_rune", "label": "Power rune", "first": 360, "interval": 120, "lead": 15,
+     "cite": "7.29: starting at 6 minutes, Power Runes spawn as usual (every 2 minutes, unchanged through 7.41f)"},
+    {"id": "wisdom_shrine", "label": "Wisdom shrines", "first": 420, "interval": 420, "lead": 20,
+     "cite": "7.33: wisdom at 7:00 and every 7 minutes; 7.38: Shrines of Wisdom activate every 7 minutes"},
+    {"id": "lotus", "label": "Healing lotus", "first": 180, "interval": 180, "lead": 10,
+     "cite": "7.33: every 3 minutes each Lotus Pool spawns 1 Healing Lotus, up to 6"},
+    {"id": "tormentor", "label": "Tormentor", "first": 1200, "respawn": 600, "lead": 30,
+     "cite": "7.39: first spawn time increased from 15:00 to 20:00; 7.33: respawns 10 minutes after defeat"},
+    {"id": "neutral_tier", "label": "Neutral items", "times": [0, 900, 1500, 2100, 3600],
+     "names": ["Tier 1", "Tier 2", "Tier 3", "Tier 4", "Tier 5"], "lead": 30,
+     "cite": "7.38: Madstone cap rises at 15:00, 25:00, 35:00 and 60:00; 7.41: Tier 1 availability changed from 5:00 to 0:00"},
+    {"id": "stack", "label": "Stack camps", "first": 60, "interval": 60, "lead": 7, "default_on": false,
+     "cite": "Neutral camps respawn on every minute mark when their spawn box is empty; pull at about :53"},
+    {"id": "siege_bonus", "label": "Extra siege creep", "times": [1800, 3600], "lead": 30, "default_on": false,
+     "cite": "7.41: first +1 siege creep timing 35:00 -> 30:00; second at 60:00"},
+    {"id": "roshan", "label": "Roshan", "respawn_min": 480, "respawn_max": 660, "lead": 60,
+     "cite": "7.38: Roshan's respawn takes between 8 to 11 minutes"},
+    {"id": "aegis", "label": "Aegis expires", "duration": 300, "lead": 30,
+     "cite": "Aegis of the Immortal disappears 5 minutes after pickup"},
+    {"id": "day_night", "label": "Day / night", "period": 300, "lead": 15,
+     "cite": "Day and night alternate every 5 minutes; the live state comes from GSI map.daytime"}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "_comment": "Reviewed corrections to traits derived from ability text (src/d2bg/knowledge/traits.py). Each entry was checked by hand against the hero's ability descriptions in data/snapshot/abilities.json.",
+  "storm_spirit": {"remove": ["illusions"], "why": "Static Remnant is a charged image that explodes, not an illusion"},
+  "invoker": {"add": ["invisibility"], "why": "Ghost Walk is an invoked spell, stored as a hidden ability"},
+  "clinkz": {"remove": ["heal"], "why": "Death Pact heals Clinkz himself, not allies"},
+  "night_stalker": {"remove": ["summons"], "why": "Dark Ascension mentions flying, not a summoned unit"},
+  "spectre": {"add": ["global"], "why": "Haunt reaches every enemy hero wherever they are"}
+}
