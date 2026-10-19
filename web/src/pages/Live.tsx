@@ -264,8 +264,8 @@ function EnemyPanel({ snap }: { snap: LiveSnapshot }) {
       <section className="panel">
         <h3>Enemy draft</h3>
         <p className="muted small">
-          Dota does not tell players the enemy picks through GSI, only spectators. Enter them on the <Link to="/draft">Draft</Link>{" "}
-          page to get counter items there.
+          No enemy seen yet. Dota sends a player no enemy picks during the draft; after loading, each enemy appears here once you
+          see them on the minimap. To plan earlier, type them on the <Link to="/draft">Draft</Link> page.
         </p>
       </section>
     );

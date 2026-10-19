@@ -10,6 +10,7 @@ import gzip
 import json
 import threading
 import time
+import zlib
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from typing import Any, TextIO
@@ -85,11 +86,19 @@ def list_recordings(directory: Path) -> list[dict[str, Any]]:
 
 
 def read(path: Path) -> Iterator[tuple[float, dict[str, Any]]]:
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        for line in f:
-            if line.strip():
-                row = json.loads(line)
-                yield float(row["t"]), row["p"]
+    """Frames of a recording. A file still being written (the current game) ends mid-stream; reading
+    stops at the last complete frame instead of failing."""
+    try:
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        return
+                    yield float(row["t"]), row["p"]
+    except (EOFError, zlib.error):
+        return
 
 
 class Player:

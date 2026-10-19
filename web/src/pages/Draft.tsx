@@ -6,15 +6,11 @@ import { ErrorBox, HeroChip, ItemIcon, Portrait, Segmented, WinSplit, useHeroMap
 import { HeroPicker } from "../components/HeroPicker";
 import { BUCKETS, POSITION_NAMES, pct, pts } from "../lib/format";
 import { useHotkeys } from "../lib/hotkeys";
+import { mergeGameDraft, type BoardState } from "../lib/liveDraft";
 
 type Target = "us" | "them" | "ban";
 
-interface DraftState {
-  us: number[];
-  them: number[];
-  bans: number[];
-  side: Side;
-}
+type DraftState = BoardState;
 
 const EMPTY: DraftState = { us: [], them: [], bans: [], side: "radiant" };
 const STORE = "d2bg.draft";
@@ -330,10 +326,48 @@ function Results({ res, state, onCompare, compare, removeCompare }: {
   );
 }
 
+/** Says what came from the game so far, and plainly what Dota does not send a player. */
+function GameStatus({ live }: { live: LiveSnapshot | null }) {
+  const draft = live?.draft;
+  if (!live || !draft || !live.connection.connected) {
+    return (
+      <p className="note" style={{ marginBottom: "1rem" }}>
+        No game data right now. During a game your hero, your team and the bans fill in here by themselves. Dota does not send a
+        player the other picks during the draft, so type those in.
+      </p>
+    );
+  }
+  const found = Object.values(draft.sources ?? {});
+  return (
+    <section className="panel" style={{ marginBottom: "1rem" }} aria-label="From the game">
+      <p className="small" style={{ margin: 0 }}>
+        <span className="dot on" />
+        From the game{live.demo ? " (demo)" : ""}: {found.length ? found.join("; ") : "nothing yet; your hero appears once you pick"}.
+      </p>
+      {draft.note && (
+        <p className="small muted" style={{ margin: "0.4rem 0 0" }}>
+          {draft.note}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function DraftPage({ live }: { live: LiveSnapshot | null }) {
   const { data: heroes } = useHeroes();
   const { data: settings } = useSettings();
   const [state, setState] = useState<DraftState>(load);
+  // Whatever the game sends (his hero and team, the bans, and after loading the minimap's heroes) fills
+  // the board by itself; his own edits stay. Synced while rendering, React's pattern for outside data.
+  const liveDraft = live?.draft;
+  const liveKey = liveDraft
+    ? JSON.stringify([live?.match_id, liveDraft.allies, liveDraft.enemies, liveDraft.bans, liveDraft.side])
+    : null;
+  const [syncedKey, setSyncedKey] = useState<string | null>(null);
+  if (liveDraft && liveKey !== syncedKey) {
+    setSyncedKey(liveKey);
+    setState((s) => mergeGameDraft(s, liveDraft, live?.match_id ?? null));
+  }
   const [history, setHistory] = useState<DraftState[]>([]);
   const [target, setTarget] = useState<Target>("them");
   const [bucket, setBucket] = useState<RankBucket | null>(null);
@@ -382,11 +416,10 @@ export function DraftPage({ live }: { live: LiveSnapshot | null }) {
   );
   useHotkeys(keys);
 
-  const liveDraft = live?.draft;
-  const canFill = !!liveDraft && (liveDraft.allies.length > 0 || liveDraft.enemies.length > 0);
+  const canFill = !!liveDraft && (liveDraft.allies.length > 0 || liveDraft.enemies.length > 0 || liveDraft.bans.length > 0);
   const fillFromGame = () => {
     if (!liveDraft) return;
-    update({ us: liveDraft.allies.slice(0, 5), them: liveDraft.enemies.slice(0, 5), bans: liveDraft.bans, side: liveDraft.side });
+    update(mergeGameDraft({ ...EMPTY }, liveDraft, live?.match_id ?? null));
   };
 
   const req: DraftRequest = {
@@ -423,12 +456,12 @@ export function DraftPage({ live }: { live: LiveSnapshot | null }) {
       <div className="page-head">
         <div>
           <h1>Draft</h1>
-          <p>Type heroes as they are picked. During ranked games Dota does not send the enemy draft to players, so this is by hand.</p>
+          <p>Your hero, your team and the bans fill in from the game by themselves. Type the other picks as they happen.</p>
         </div>
         <div className="row">
           {canFill && (
             <button className="btn primary" type="button" onClick={fillFromGame}>
-              Fill from game
+              Reset to the game's draft
             </button>
           )}
           <button className="btn" type="button" onClick={() => update({ ...state, side: radiantIsUs ? "dire" : "radiant" })}>
@@ -442,6 +475,7 @@ export function DraftPage({ live }: { live: LiveSnapshot | null }) {
           </button>
         </div>
       </div>
+      <GameStatus live={live} />
 
       <div className="board">
         <Slots

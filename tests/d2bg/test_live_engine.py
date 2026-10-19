@@ -25,16 +25,27 @@ def test_demo_is_deterministic(shared_ctx):
     a = demo_frames(shared_ctx, "juggernaut", minutes=5)
     b = demo_frames(shared_ctx, "juggernaut", minutes=5)
     assert a == b
-    assert demo_draft(a)["radiant"][0] == shared_ctx.data.heroes.require("juggernaut").id
+    assert demo_draft(a, shared_ctx)["radiant"][0] == shared_ctx.data.heroes.require("juggernaut").id
 
 
-def test_draft_phase_fills_both_teams(shared_ctx, frames):
+def test_draft_phase_shows_what_a_player_gets(shared_ctx, frames):
+    """Like a real ranked draft: his hero and the bans, never the other picks."""
     engine = LiveEngine(shared_ctx)
     run(engine, frames[:10])
     snap = engine.snapshot()
     assert snap["phase"] == "hero_selection" and snap["match_id"] == DEMO_MATCH_ID
-    full = demo_draft(frames)
-    assert snap["draft"]["allies"] == full["radiant"] and snap["draft"]["enemies"] == full["dire"]
+    assert snap["draft"]["allies"] == [shared_ctx.data.heroes.require("juggernaut").id]
+    assert snap["draft"]["enemies"] == [] and len(snap["draft"]["bans"]) == 4
+    assert not any(p.get("draft") for _, p in frames)
+
+
+def test_teams_fill_in_from_the_minimap_after_loading(shared_ctx, frames):
+    engine = LiveEngine(shared_ctx)
+    run(engine, frames, until=6 * 60)
+    snap = engine.snapshot()
+    full = demo_draft(frames, shared_ctx)
+    assert snap["draft"]["allies"] == full["radiant"]
+    assert set(snap["draft"]["enemies"]) == set(full["dire"])  # one enemy seen each minute
     assert snap["situational_items"] is not None and snap["enemy_threats"]
 
 
