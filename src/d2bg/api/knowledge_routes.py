@@ -128,11 +128,8 @@ def build_txt(svc: Svc, ref: str) -> str:
 
 @router.get("/items")
 def items(svc: Svc) -> list[dict[str, Any]]:
-    return [
-        {**i.summary(), "builds_into": svc.ctx.data.items.builds_into(i.key)}
-        for i in svc.ctx.data.items
-        if i.cost > 0 or i.is_neutral
-    ]
+    # Every item, free ones included (Observer Wards cost 0); the Items page filters for the shop.
+    return [{**i.summary(), "builds_into": svc.ctx.data.items.builds_into(i.key)} for i in svc.ctx.data.items]
 
 
 @router.get("/items/{key}")

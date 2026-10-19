@@ -11,7 +11,7 @@ import random
 from collections.abc import Sequence
 from typing import Any
 
-from d2bg.builds.guide import build_order
+from d2bg.builds.guide import build_order, next_items
 from d2bg.context import AppContext
 
 DEMO_MATCH_ID = "9000000001"
@@ -100,7 +100,6 @@ def demo_frames(
     events: list[dict[str, Any]] = []
     radiant_score = dire_score = 0
     clock = -90
-    order_idx = 0
     while clock <= minutes * 60:
         phase = "DOTA_GAMERULES_STATE_PRE_GAME" if clock < 0 else "DOTA_GAMERULES_STATE_GAME_IN_PROGRESS"
         if clock > 0:
@@ -109,7 +108,7 @@ def demo_frames(
             income = gpm_now * step / 60
             gold += income
             gold_total += income
-            xp += (380 + 12 * minute) * step / 60
+            xp += (300 + 8 * minute) * step / 60
             lh += int(rng.random() < 0.3 + 0.004 * minute)  # about 6 a minute early, rising slowly
             dn += 1 if rng.random() < 0.05 and minute < 12 else 0
             if rng.random() < 0.012:
@@ -128,18 +127,18 @@ def demo_frames(
             nxt = skill_order[spent]
             if nxt in skill_levels:
                 skill_levels[nxt] += 1
-        while order_idx < len(order):
-            target = order[order_idx]
-            cost = items.remaining_cost(target, owned)
-            if cost > gold:
+        # Buy whatever the build tracker says is next, so the demo follows the same rules as the app.
+        while True:
+            nxt_items = next_items([{"key": k} for k in order], owned, items, n=1)
+            if not nxt_items or nxt_items[0]["remaining"] > gold:
                 break
-            gold -= cost
+            target = nxt_items[0]["item"]
+            gold -= nxt_items[0]["remaining"]
             comps = items.get(target).components if items.get(target) else ()  # type: ignore[union-attr]
             for c in comps:
                 if c in owned:
                     owned.remove(c)
             owned.append(target)
-            order_idx += 1
             if len(owned) > 9:
                 owned.pop(0)
         if clock == 22 * 60:

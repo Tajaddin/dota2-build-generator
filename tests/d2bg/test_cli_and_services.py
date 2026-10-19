@@ -109,3 +109,10 @@ def test_settings_store(tmp_path):
     (tmp_path / "bad.json").write_text("{not json")
     fresh = SettingsStore(tmp_path / "bad.json")
     assert fresh.get().account_id is None and (tmp_path / "bad.corrupt.json").exists()
+
+
+def test_next_items_skips_other_boots_once_he_has_one(shared_ctx):
+    items = shared_ctx.data.items
+    order = [{"key": "phase_boots"}, {"key": "power_treads"}, {"key": "bfury"}, {"key": "travel_boots"}]
+    assert [n["item"] for n in next_items(order, ["phase_boots"], items)] == ["bfury", "travel_boots"]
+    assert [n["item"] for n in next_items(order, [], items, n=2)] == ["phase_boots", "power_treads"]

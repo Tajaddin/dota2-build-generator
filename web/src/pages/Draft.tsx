@@ -177,9 +177,8 @@ function Results({ res, state, onCompare, compare, removeCompare }: {
           {n}
         </div>
       ))}
-      <div className="grid cols-2">
-        <section className="panel">
-          <h2>Picks for you</h2>
+      <section className="panel">
+        <h2>Picks for you</h2>
           <div className="tabs" role="tablist">
             {["all", "1", "2", "3", "4", "5"].map((t) => (
               <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} title={t === "all" ? "" : POSITION_NAMES[Number(t)]}>
@@ -192,7 +191,8 @@ function Results({ res, state, onCompare, compare, removeCompare }: {
             Score = average win-rate edge over their picks plus your synergy weight times the edge with your picks, in percentage
             points. {res.sample_matches.toLocaleString()} ranked matches, {res.source_week}, {BUCKETS.find((b) => b.value === res.bucket)?.label}.
           </p>
-        </section>
+      </section>
+      <div className="grid cols-2">
         <section className="panel">
           <h2>Bans</h2>
           <ul className="small" style={{ listStyle: "none", padding: 0, margin: 0 }}>
@@ -217,6 +217,23 @@ function Results({ res, state, onCompare, compare, removeCompare }: {
             </>
           )}
         </section>
+        {Object.keys(res.counters).length > 0 && (
+          <section className="panel">
+            <h2>What beats each enemy</h2>
+            {Object.entries(res.counters).map(([enemy, list]) => (
+              <div key={enemy} style={{ marginBottom: "0.6rem" }}>
+                <HeroChip hero={Number(enemy)} size={26} />
+                <div className="row small" style={{ marginTop: "0.3rem" }}>
+                  {list.slice(0, 5).map((c) => (
+                    <span key={c.hero} className="tag" title={`${pts(c.edge)} points`}>
+                      {heroMap.get(c.hero)?.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
       </div>
       {compare.length > 0 && (
         <section className="panel">
@@ -251,25 +268,6 @@ function Results({ res, state, onCompare, compare, removeCompare }: {
               ))}
             </tbody>
           </table>
-        </section>
-      )}
-      {Object.keys(res.counters).length > 0 && (
-        <section className="panel">
-          <h2>What beats each enemy</h2>
-          <div className="grid cols-3">
-            {Object.entries(res.counters).map(([enemy, list]) => (
-              <div key={enemy}>
-                <HeroChip hero={Number(enemy)} size={30} />
-                <div className="row small" style={{ marginTop: "0.4rem" }}>
-                  {list.slice(0, 5).map((c) => (
-                    <span key={c.hero} className="tag" title={`${pts(c.edge)} points`}>
-                      {heroMap.get(c.hero)?.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         </section>
       )}
       <div className="grid cols-2">

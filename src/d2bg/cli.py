@@ -52,7 +52,7 @@ def data_refresh(
         if total > 1 and done % 10 == 0:
             typer.echo(f"  {step}: {done}/{total} {message}", err=True)
 
-    refresher = Refresher(client, out, progress)
+    refresher = Refresher(client, out, progress, seed_dir=None if to_snapshot else paths.snapshot_dir())
     chosen = list(STEPS) if steps == "all" else [s.strip() for s in steps.split(",") if s.strip()]
     if import_pages is not None:
         result = refresher.import_public_pages(import_pages)

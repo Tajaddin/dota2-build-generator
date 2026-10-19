@@ -180,3 +180,23 @@ def test_matches_file_roundtrip(tmp_path):
     assert r.read_matches_gz(path) == []
     assert r.write_matches_gz(path, [{"a": 1}, {"a": 2}]) == 2
     assert r.read_matches_gz(path) == [{"a": 1}, {"a": 2}]
+
+
+def test_first_refresh_builds_on_the_shipped_matches(tmp_path):
+    seed = tmp_path / "seed"
+    out = tmp_path / "out"
+    old = [
+        {
+            "match_id": 1,
+            "start_time": int(NOW) - 3600,
+            "radiant": [1],
+            "dire": [2],
+            "radiant_win": True,
+            "avg_rank_tier": 35,
+        }
+    ]
+    r.write_matches_gz(seed / "public_matches.jsonl.gz", old)
+    refresher = r.Refresher(FakeOpenDota(), out, now=lambda: NOW, seed_dir=seed)  # type: ignore[arg-type]
+    refresher.constants()
+    res = refresher.matchups(max_calls=1)
+    assert res.rows == 101  # 100 new rows plus the one shipped match

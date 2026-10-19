@@ -89,11 +89,14 @@ class Refresher:
         out_dir: Path,
         progress: Progress | None = None,
         now: Callable[[], float] = time.time,
+        seed_dir: Path | None = None,
     ) -> None:
         self.client = client
         self.out = out_dir
         self.progress = progress or _noop
         self.now = now
+        # Where the first refresh into a new folder takes its earlier public matches from.
+        self.seed_dir = seed_dir
         self.out.mkdir(parents=True, exist_ok=True)
 
     # ── manifest ───────────────────────────────────────────────────
@@ -305,7 +308,8 @@ class Refresher:
 
     def _write_matchups(self, new_rows: list[dict[str, Any]], calls: int, days: int) -> StepResult:
         store = self.out / "public_matches.jsonl.gz"
-        merged = {int(r["match_id"]): r for r in read_matches_gz(store)}
+        earlier = store if store.exists() or self.seed_dir is None else self.seed_dir / store.name
+        merged = {int(r["match_id"]): r for r in read_matches_gz(earlier)}
         for r in new_rows:
             nm = matchups.normalize_match(r)
             if nm:
@@ -332,6 +336,12 @@ class Refresher:
         return self._write_matchups(rows, 0, days)
 
     def draft_model(self) -> StepResult:
+        import importlib.util
+
+        if importlib.util.find_spec("sklearn") is None:
+            return StepResult(
+                "draft_model", note="skipped: retraining needs the train extra (uv sync --extra train)"
+            )
         from d2bg.pipeline import train_draft
 
         matches = read_matches_gz(self.out / "public_matches.jsonl.gz")

@@ -173,12 +173,19 @@ def build_order(ctx: AppContext, hero_id: int) -> list[dict[str, Any]]:
     return out
 
 
+def is_boots_upgrade(key: str, items: ItemIndex) -> bool:
+    """Boots built from Boots of Speed: Phase, Treads, Arcane, Tranquil, Travel..."""
+    item = items.get(key)
+    return item is not None and "boots" in item.components
+
+
 def next_items(
     order: Iterable[Mapping[str, Any]], owned: Iterable[str], items: ItemIndex, n: int = 3
 ) -> list[dict[str, Any]]:
     """The next items in the build that he does not own yet, with gold still needed for each."""
     have = list(owned)
     have_set = set(have)
+    owns_boots = any(is_boots_upgrade(h, items) for h in have_set)
     out = []
     for o in order:
         key = o["key"] if "key" in o else o["item"]
@@ -186,6 +193,9 @@ def next_items(
             continue
         # Skip an item already folded into something he owns (e.g. Yasha once Manta is built).
         if any(key in (items.get(h).components if items.get(h) else ()) for h in have_set):  # type: ignore[union-attr]
+            continue
+        # One pair of boots: once he has Phase Boots, Power Treads is an alternative, not a next item.
+        if owns_boots and is_boots_upgrade(key, items) and not key.startswith("travel_boots"):
             continue
         out.append(items.owned_progress(key, have))
         if len(out) >= n:

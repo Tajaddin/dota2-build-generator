@@ -151,7 +151,9 @@ def data_refresh(svc: Svc, body: RefreshBody) -> dict[str, Any]:
 
     def run() -> None:
         try:
-            refresher = Refresher(svc.ctx.client, paths.refreshed_data_dir(), progress)
+            refresher = Refresher(
+                svc.ctx.client, paths.refreshed_data_dir(), progress, seed_dir=paths.snapshot_dir()
+            )
             for result in refresher.run(
                 steps, **({"max_calls": body.max_calls} if "matchups" in steps else {})
             ):
