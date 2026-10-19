@@ -139,3 +139,23 @@ def test_similarity(data):
     assert cosine({"1": 1.0}, {"1": 1.0}) == 0.0  # too few shared heroes to say
     sims = most_similar(data.matchup_bucket("all"), 1, n=5)
     assert len(sims) == 5 and all(-1 <= s <= 1 for _, s in sims) and all(h != 1 for h, _ in sims)
+
+
+@pytest.mark.parametrize(("hero", "trait"), [
+    ("crystal_maiden", Trait.ROOT), ("axe", Trait.TAUNT), ("legion_commander", Trait.TAUNT),
+    ("doom_bringer", Trait.SILENCE),
+])
+def test_more_disables(shared_ctx, hero, trait):
+    assert trait in shared_ctx.traits.of(shared_ctx.data.heroes.require(hero).id)
+
+
+@pytest.mark.parametrize("hero", ["invoker", "doom_bringer", "rubick"])
+def test_placeholder_slots_are_not_passives(shared_ctx, hero):
+    assert Trait.PASSIVES not in shared_ctx.traits.of(shared_ctx.data.heroes.require(hero).id)
+
+
+def test_talent_placeholders_become_x(data):
+    jugg = data.heroes.require("juggernaut")
+    names = [t.name for t in jugg.talents]
+    assert "+X Blade Fury DPS" in names
+    assert not any("{" in n for h in data.heroes for n in (t.name for t in h.talents))

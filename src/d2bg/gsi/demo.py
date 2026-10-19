@@ -110,7 +110,7 @@ def demo_frames(
             gold += income
             gold_total += income
             xp += (380 + 12 * minute) * step / 60
-            lh += rng.choice([0, 0, 1, 1, 1, 2]) if minute < 40 else rng.choice([1, 2, 3])
+            lh += int(rng.random() < 0.3 + 0.004 * minute)  # about 6 a minute early, rising slowly
             dn += 1 if rng.random() < 0.05 and minute < 12 else 0
             if rng.random() < 0.012:
                 kills += 1

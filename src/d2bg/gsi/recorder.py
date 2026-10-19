@@ -100,13 +100,14 @@ class Player:
         frames: list[tuple[float, dict[str, Any]]],
         ingest: Callable[[dict[str, Any]], None],
         speed: float = 1.0,
-        sleep: Callable[[float], None] = time.sleep,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         self.frames = frames
         self.ingest = ingest
         self.speed = max(speed, 0.01)
-        self._sleep = sleep
         self._stop = threading.Event()
+        # By default the wait between frames ends as soon as stop() is called.
+        self._sleep: Callable[[float], object] = sleep or self._stop.wait
         self._thread: threading.Thread | None = None
         self.position = 0
 
@@ -115,7 +116,10 @@ class Player:
         self._thread.start()
 
     def stop(self) -> None:
+        """Stop and wait (briefly) for the thread, so no frame lands after this returns."""
         self._stop.set()
+        if self._thread is not None and self._thread is not threading.current_thread():
+            self._thread.join(timeout=2.0)
 
     @property
     def running(self) -> bool:
@@ -128,6 +132,8 @@ class Player:
                 return
             if last is not None and t > last:
                 self._sleep((t - last) / self.speed)
+                if self._stop.is_set():
+                    return
             last = t
             self.position = i + 1
             self.ingest(payload)

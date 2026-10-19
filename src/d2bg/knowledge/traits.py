@@ -39,6 +39,7 @@ class Trait(StrEnum):
     ARMOR_REDUCTION = "armor_reduction"
     MANA_BURN = "mana_burn"
     LIFESTEAL = "lifesteal"
+    TAUNT = "taunt"
 
 
 LABELS: dict[Trait, str] = {
@@ -64,16 +65,17 @@ LABELS: dict[Trait, str] = {
     Trait.ARMOR_REDUCTION: "Armor reduction",
     Trait.MANA_BURN: "Mana burn",
     Trait.LIFESTEAL: "Lifesteal",
+    Trait.TAUNT: "Taunt",
 }
 
-DISABLES = (Trait.STUN, Trait.HEX, Trait.SILENCE, Trait.ROOT)
+DISABLES = (Trait.STUN, Trait.HEX, Trait.SILENCE, Trait.ROOT, Trait.TAUNT)
 
 _ALLY = r"all(?:y|ies|ied)|friendly|teammate"
 PATTERNS: dict[Trait, re.Pattern[str]] = {
     Trait.STUN: re.compile(r"\bstun"),
     Trait.HEX: re.compile(r"\bhex(?:es|ed)?\b|harmless (?:beast|critter)"),
     Trait.ROOT: re.compile(
-        r"\broot(?:s|ed|ing)?\b|ensnar|entangl|in place|prevent\w* (?:them from )?mov|cannot move"
+        r"\broot(?:s|ed|ing)?\b|ensnar|entangl|in place|(?:prevent|prohibit)\w* (?:them from )?mov|cannot move"
     ),
     Trait.INVISIBILITY: re.compile(
         r"\b(?:becom\w*|turns?|render\w*|grants?)\b[^.]{0,40}invisib|moves invisibly|invisible until"
@@ -109,11 +111,14 @@ _SAVE = re.compile(
     r"cannot die|invulnerab|banish|untargetable|delay\w* (?:any |all )?(?:healing or )?damage"
     r"|absorbs?[^.]{0,30}damage|freez\w* them solid|immune to (?:physical|magic|all)"
 )
-_SILENCE = re.compile(r"\bsilenc")
+_SILENCE = re.compile(r"\bsilenc|prevent\w* (?:them )?from casting|cannot cast spells")
+_TAUNT = re.compile(r"\btaunt|forc\w* (?:them )?to attack|forced to attack")
+# Invoker, Doom and Rubick have empty passive slots that other abilities replace; they are not passives.
+_PLACEHOLDER = re.compile(r"replace this slot|slot will be replaced")
 
 
 def _visible(hero: Hero) -> list[Ability]:
-    return [a for a in hero.abilities if "Hidden" not in a.behavior]
+    return [a for a in hero.abilities if "Hidden" not in a.behavior and not _PLACEHOLDER.search(a.desc.lower())]
 
 
 def _affects_allies(a: Ability) -> bool:
@@ -142,6 +147,8 @@ def derive(hero: Hero) -> dict[Trait, list[str]]:
             add(trait, a)
         if _SILENCE.search(text) and (not a.is_passive or any("SILENCE" in h for h, _, _ in a.attrib)):
             add(Trait.SILENCE, a)
+        if _TAUNT.search(text) and not a.is_passive:
+            add(Trait.TAUNT, a)
         if _HEAL.search(text) and _affects_allies(a):
             add(Trait.HEAL, a)
         if (

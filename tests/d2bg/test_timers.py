@@ -83,3 +83,8 @@ def test_upcoming_sorts_and_filters(shared_ctx):
 def test_load_defaults():
     [r] = TimerRule.load({"rules": [{"id": "x", "label": "X", "cite": "c", "first": 0, "interval": 10}]})
     assert r.lead == 15 and r.default_on
+
+
+def test_day_night_before_the_horn_counts_from_zero(rules):
+    v = evaluate(rules["day_night"], -30, TimerState(daytime=True))
+    assert v.at == 300 and v.detail == "Night at 5:00"

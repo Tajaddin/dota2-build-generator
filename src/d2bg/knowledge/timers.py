@@ -142,10 +142,11 @@ def evaluate(rule: TimerRule, clock: float, state: TimerState) -> TimerView | No
         return view(None, "alive", "Up (no kill seen)")
     if rule.id == "day_night":
         period = rule.period or 300
+        # Day starts at the horn; before it there is no cycle to count.
         anchor = state.day_flip_at if state.day_flip_at is not None else 0.0
         estimated = state.day_flip_at is None
-        nxt = anchor + period * (math.floor((clock - anchor) / period) + 1)
-        is_day = state.daytime if state.daytime is not None else (math.floor(clock / period) % 2 == 0)
+        nxt = anchor + period * (math.floor((max(clock, 0.0) - anchor) / period) + 1)
+        is_day = state.daytime if state.daytime is not None else (math.floor(max(clock, 0.0) / period) % 2 == 0)
         detail = ("Night" if is_day else "Day") + f" at {fmt(nxt)}"
         return view(nxt, "estimated" if estimated else "upcoming", detail)
     if rule.times:
@@ -153,7 +154,7 @@ def evaluate(rule: TimerRule, clock: float, state: TimerState) -> TimerView | No
         if hit is None:
             return None
         i, at = hit
-        name = rule.names[i] if i < len(rule.names) else rule.label
+        name = rule.names[i] if i < len(rule.names) else "Next"
         return view(at, "upcoming", f"{name} at {fmt(at)}")
     if rule.first is not None and rule.interval:
         at = next_periodic(rule.first, rule.interval, clock)

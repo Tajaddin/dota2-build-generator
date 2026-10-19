@@ -13,6 +13,11 @@ def norm(text: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text.lower())
 
 
+def talent_name(raw: str) -> str:
+    """Valve's talent text often has an unfilled "{s:bonus_x}"; the public data has no value for it."""
+    return re.sub(r"\{s:[^}]*\}", "X", raw)
+
+
 @dataclass(frozen=True)
 class Talent:
     key: str
@@ -117,7 +122,9 @@ class HeroIndex:
             )
             talents = tuple(
                 Talent(
-                    t["key"], int(t["level"]), str(abilities_doc.get(t["key"], {}).get("dname") or t["key"])
+                    t["key"],
+                    int(t["level"]),
+                    talent_name(str(abilities_doc.get(t["key"], {}).get("dname") or t["key"])),
                 )
                 for t in raw["talents"]
             )

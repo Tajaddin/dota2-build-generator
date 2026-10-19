@@ -241,3 +241,22 @@ def test_player_feeds_frames_in_order_with_speed():
 
 def test_payload_fixture_is_json_serialisable():
     json.dumps(PLAYING)
+
+
+def test_player_stop_lands_no_frame_after_it_returns():
+    import threading
+
+    got: list[int] = []
+    started = threading.Event()
+
+    def ingest(p: dict) -> None:
+        got.append(p["n"])
+        started.set()
+
+    player = recorder.Player([(float(i), {"n": i}) for i in range(100)], ingest, speed=2)
+    player.start()
+    assert started.wait(2)
+    player.stop()
+    count = len(got)
+    assert not player.running
+    assert len(got) == count < 100
