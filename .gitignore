@@ -38,3 +38,6 @@ Thumbs.db
 
 # Claude internal
 .claude/
+
+# API response caches
+data/cache/
