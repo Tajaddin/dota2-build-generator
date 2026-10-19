@@ -1,7 +1,8 @@
-"""Tests for logic/draft_advisor.py on tiny hand-written matrices."""
+"""Tests for d2bg.draft.advisor on tiny hand-written matrices."""
+
 import pytest
 
-from logic.draft_advisor import (
+from d2bg.draft.advisor import (
     counters,
     hot_counters,
     meta,
@@ -9,8 +10,8 @@ from logic.draft_advisor import (
     score,
     suggest,
 )
-from ml.build_matchup_matrix import build_matrix
-from tests.test_matchup_matrix import fixture_matches
+from d2bg.pipeline.matchups import build_matrix
+from tests.d2bg.test_matchups import fixture_matches
 
 BUCKET = {
     "heroes": {
@@ -18,7 +19,7 @@ BUCKET = {
         "2": {"wr": 0.55, "pick_rate": 0.005},  # below 1%: never meta
         "3": {"wr": 0.51, "pick_rate": 0.3},
         "4": {"wr": 0.49, "pick_rate": 0.1},
-        "5": {"wr": 0.53, "pick_rate": 0.01},   # exactly 1%: allowed
+        "5": {"wr": 0.53, "pick_rate": 0.01},  # exactly 1%: allowed
         "6": {"wr": 0.50, "pick_rate": 0.05},
     },
     "vs": {
@@ -65,19 +66,18 @@ def test_score_adds_weighted_synergy():
 
 
 def test_role_clash_when_only_role_is_taken():
-    assert role_clash_penalty(2, [1], ROLES) == 10.0       # both carry-only
-    assert role_clash_penalty(3, [1], ROLES) == 0.0        # 3 can go mid
-    assert role_clash_penalty(1, [3], ROLES) == 0.0        # 3 moves to mid
-    assert role_clash_penalty(2, [1, 3], ROLES) == 10.0    # carry and mid both taken
-    assert role_clash_penalty(3, [1, 2], ROLES) == 0.0     # adds mid to a team that clashes already
-    assert role_clash_penalty(6, [1], ROLES) == 0.0        # unknown roles never clash
+    assert role_clash_penalty(2, [1], ROLES) == 10.0  # both carry-only
+    assert role_clash_penalty(3, [1], ROLES) == 0.0  # 3 can go mid
+    assert role_clash_penalty(1, [3], ROLES) == 0.0  # 3 moves to mid
+    assert role_clash_penalty(2, [1, 3], ROLES) == 10.0  # carry and mid both taken
+    assert role_clash_penalty(3, [1, 2], ROLES) == 0.0  # adds mid to a team that clashes already
+    assert role_clash_penalty(6, [1], ROLES) == 0.0  # unknown roles never clash
     assert role_clash_penalty(2, [], ROLES) == 0.0
     assert role_clash_penalty(2, [1], None) == 0.0
 
 
 def test_suggest_respects_bans_blacklist_and_ranks():
-    out = suggest(BUCKET, enemies=[4], allies=[1], bans=[5], blacklist=[6],
-                  w=0.5, hero_roles=ROLES)
+    out = suggest(BUCKET, enemies=[4], allies=[1], bans=[5], blacklist=[6], w=0.5, hero_roles=ROLES)
     # 2: -3 + 0.5*6 - 10 (clash with carry 1);  3: 1 + 0.5*(-2)
     assert out == [(3, pytest.approx(0.0)), (2, pytest.approx(-10.0))]
 
