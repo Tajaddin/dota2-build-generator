@@ -14,7 +14,7 @@ review. It listens only to what Dota 2 sends through Valve's **Game State Integr
 | Live engine | p50 **0.34 ms**, p95 0.65 ms per GSI update | `bench/latency.py`: 2,526 synthetic payloads, in process, on this PC (Windows 11, Core i5-13600KF, 32 GB). `reports/latency.json` |
 | GSI round trip | p50 **1.7 ms**, p95 2.3 ms | The same payloads POSTed to `/gsi` over loopback HTTP, token check included |
 | Draft analysis | p50 **4.3 ms**, p95 6.2 ms | 300 random drafts with 0 to 5 heroes a side |
-| Tests | 161 Python tests (94% line coverage), 6 Vitest, 6 Playwright end-to-end, 21 v1 tests | All run in CI on every push |
+| Tests | 168 Python tests (94% line coverage), 6 Vitest, 6 Playwright end-to-end, 25 v1 tests | All run in CI on every push |
 | Data snapshot | 127 heroes, 409 items, 35,074 ranked matches, 2,306 pro matches (22,687 hero-games) since 2026-06-21, patch 7.41 | `data/snapshot/manifest.json` |
 | Full data refresh | about 650 OpenDota requests (the free limit is about 3,000 a day) | Measured on 2026-10-19 |
 | UI bundle | 113 KB of JavaScript and 4 KB of CSS, gzipped | `npm run build` |
