@@ -1,12 +1,13 @@
 """Tests for GSI server."""
 
+import http.client
 import json
 import socket
 import time
 import urllib.error
 import urllib.request
 
-from logic.gsi_server import GSIServer
+from logic.gsi_server import MAX_BODY_BYTES, GSIServer
 from logic.gsi_installer import GSI_AUTH_TOKEN
 
 
@@ -122,5 +123,33 @@ class TestGSIServer:
             state = server.get_state()
             assert state is not None
             assert state["hero"]["name"] == "npc_dota_hero_antimage"
+        finally:
+            server.stop()
+
+    def test_server_listens_on_loopback_only(self):
+        server = GSIServer(port=_free_port())
+        server.start()
+        try:
+            assert server._server.server_address[0] == "127.0.0.1"
+        finally:
+            server.stop()
+
+    def test_server_refuses_oversized_or_invalid_bodies_without_reading_them(self):
+        received = []
+        port = _free_port()
+        server = GSIServer(port=port, on_update=lambda data: received.append(data))
+        server.start()
+        try:
+            for length, status in ((str(MAX_BODY_BYTES + 1), 413), ("-1", 400), ("lots", 400)):
+                conn = http.client.HTTPConnection("127.0.0.1", port, timeout=3)
+                try:
+                    conn.putrequest("POST", "/")
+                    conn.putheader("Content-Type", "application/json")
+                    conn.putheader("Content-Length", length)
+                    conn.endheaders()  # no body: the server must answer from the header alone
+                    assert conn.getresponse().status == status
+                finally:
+                    conn.close()
+            assert received == []
         finally:
             server.stop()

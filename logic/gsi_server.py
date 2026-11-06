@@ -7,12 +7,21 @@ from typing import Callable, Optional
 
 from logic.gsi_installer import GSI_AUTH_TOKEN
 
+MAX_BODY_BYTES = 1024 * 1024
+
 
 class _GSIHandler(BaseHTTPRequestHandler):
     """Handler for GSI POST requests."""
 
     def do_POST(self):
-        content_length = int(self.headers.get("Content-Length", 0))
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            content_length = -1
+        if not 0 <= content_length <= MAX_BODY_BYTES:
+            self.send_response(413 if content_length > MAX_BODY_BYTES else 400)
+            self.end_headers()
+            return
         body = self.rfile.read(content_length)
         try:
             data = json.loads(body.decode("utf-8"))
@@ -116,17 +125,17 @@ class GSIServer:
     def start(self):
         """Start the GSI server in a background thread.
 
-        Binds to 0.0.0.0 (all interfaces) so it works regardless of
-        whether the GSI config uses 'localhost' or '127.0.0.1'.
+        Binds to 127.0.0.1 only: the installed GSI config posts there, and
+        nothing on the network should be able to send game state.
         """
-        self._server = HTTPServer(("0.0.0.0", self.port), _GSIHandler)
+        self._server = HTTPServer(("127.0.0.1", self.port), _GSIHandler)
         self._server.gsi_callback = self._handle_data
         self._server.gsi_validate_auth = self._validate_auth
         self._server._update_count = 0
         self._server._last_update_time = "never"
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
-        print(f"[GSI] Server listening on http://0.0.0.0:{self.port}")
+        print(f"[GSI] Server listening on http://127.0.0.1:{self.port}")
         print(f"[GSI] Verify it's running: open http://127.0.0.1:{self.port} in your browser")
         if self.expected_auth_token:
             print("[GSI] Auth validation enabled")
