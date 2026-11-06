@@ -15,6 +15,7 @@ from d2bg.api.app import create_app
 from tests.d2bg.test_gsi import PLAYING, _fake_steam
 
 BASE = "https://api.opendota.com/api"
+LOCAL = "http://127.0.0.1:4242"
 
 
 @pytest.fixture
@@ -24,7 +25,7 @@ def app(ctx, tmp_path):
 
 @pytest.fixture
 def client(app):
-    with TestClient(app) as c:
+    with TestClient(app, base_url=LOCAL) as c:
         yield c
 
 
@@ -46,7 +47,7 @@ def test_spa_serves_built_files(ctx, tmp_path):
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text("<html>app</html>")
     (dist / "assets" / "a.js").write_text("js")
-    with TestClient(create_app(ctx, static_dir=dist)) as c:
+    with TestClient(create_app(ctx, static_dir=dist), base_url=LOCAL) as c:
         assert c.get("/").text == "<html>app</html>"
         assert c.get("/live/anything").text == "<html>app</html>"
         assert c.get("/assets/a.js").text == "js"
@@ -80,6 +81,29 @@ def test_lan_off_rejects_other_devices(ctx, tmp_path):
     with TestClient(create_app(ctx, lan=False, static_dir=tmp_path), client=("10.0.0.2", 1)) as other:
         token = ctx.settings.get().lan_token
         assert other.get(f"/api/version?token={token}").status_code == 403
+
+
+def test_writes_from_other_websites_are_refused(client):
+    # A page on any site can send these without a CORS preflight; the parse request spends his API key.
+    simple = {"Origin": "https://evil.example", "Content-Type": "text/plain"}
+    for path in ("/api/live/reset", "/api/replay/stop", "/api/matches/1/parse"):
+        assert client.post(path, headers=simple, content=b"").status_code == 403
+    assert client.post("/api/live/reset", headers={"Origin": "null"}).status_code == 403
+    assert client.post("/api/live/reset", headers={"Origin": LOCAL}).json() == {"ok": True}
+    assert client.post("/api/live/reset").json() == {"ok": True}  # no Origin: Dota, curl, scripts
+
+
+@pytest.mark.parametrize("lan", [False, True])
+def test_other_host_names_are_refused(ctx, tmp_path, lan):
+    # DNS rebinding: a site resolves its own name to 127.0.0.1, so the connection is local but the Host is not.
+    app = create_app(ctx, lan=lan, static_dir=tmp_path)
+    with TestClient(app, base_url="http://attacker.example:4242") as rebound:
+        assert rebound.get("/api/settings").status_code == 403
+        assert rebound.get("/api/version").status_code == 403
+        assert rebound.put("/api/settings", json={"account_id": 1}).status_code == 403
+    for name in ("http://localhost:4242", "http://[::1]:4242"):
+        with TestClient(app, base_url=name) as local:
+            assert local.get("/api/version").status_code == 200
 
 
 def test_live_stream_sends_a_snapshot(client, ctx):
@@ -205,7 +229,7 @@ def live_client(ctx, tmp_path, monkeypatch):
     from d2bg.opendota import OpenDotaClient
 
     ctx._client = OpenDotaClient(cache_dir=tmp_path / "odcache", min_interval=0, sleep=lambda s: None)
-    with TestClient(create_app(ctx, static_dir=tmp_path)) as c:
+    with TestClient(create_app(ctx, static_dir=tmp_path), base_url=LOCAL) as c:
         yield c
 
 
