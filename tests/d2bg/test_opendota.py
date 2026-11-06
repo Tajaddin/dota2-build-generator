@@ -85,6 +85,48 @@ def test_429_backs_off_with_retry_after(client, ft):
 
 
 @respx.mock
+def test_long_retry_after_gives_up_instead_of_waiting(client, ft):
+    route = respx.get(f"{BASE}/x").mock(return_value=httpx.Response(429, headers={"Retry-After": "86400"}))
+    with pytest.raises(OpenDotaError, match="wait 86400s"):
+        client.get("x", ttl=0)
+    assert route.call_count == 1
+    assert ft.slept == []
+
+
+@respx.mock
+def test_429_without_retry_after_waits_at_most_a_minute(client, ft):
+    respx.get(f"{BASE}/x").mock(return_value=httpx.Response(429))
+    with pytest.raises(OpenDotaError, match="gave up"):
+        client.get("x", ttl=0)
+    assert ft.slept == [30.0, 60.0, 60.0]  # and none after the last attempt
+
+
+@respx.mock
+def test_waits_happen_outside_the_client_lock(tmp_path, ft):
+    # Waiting with the lock held would stall every other request thread for up to a minute.
+    locked: list[bool] = []
+
+    def sleep(seconds: float) -> None:
+        locked.append(client._lock.locked())
+        ft.sleep(seconds)
+
+    client = OpenDotaClient(
+        cache_dir=tmp_path, min_interval=1.0, clock=ft.clock, wall_clock=ft.clock, sleep=sleep
+    )
+    respx.get(f"{BASE}/x").mock(
+        side_effect=[
+            httpx.Response(200, json=1, headers={"X-Rate-Limit-Remaining-Minute": "1"}),
+            httpx.Response(429, headers={"Retry-After": "5"}),
+            httpx.Response(200, json=2),
+        ]
+    )
+    client.get("x", ttl=0)
+    assert client.get("x", ttl=0) == 2
+    assert ft.slept == [60.0, 5.0]
+    assert locked == [False, False]
+
+
+@respx.mock
 def test_5xx_retries_then_gives_up(client):
     respx.get(f"{BASE}/x").mock(return_value=httpx.Response(503))
     with pytest.raises(OpenDotaError, match="gave up"):

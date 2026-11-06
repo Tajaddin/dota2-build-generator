@@ -4,7 +4,8 @@ Every call goes through here so the app stays a polite API user:
 
 - at most one request per ``min_interval`` seconds (default 1.0 s, i.e. 60 a minute, the free limit);
 - reads ``X-Rate-Limit-Remaining-Minute`` and ``-Day`` and waits or stops before hitting them;
-- backs off on 429 (honouring ``Retry-After``) and retries 5xx and network errors;
+- backs off on 429 (honouring ``Retry-After`` up to a minute, giving up beyond that) and retries 5xx
+  and network errors;
 - caches every GET on disk with a per-call lifetime, so a rerun spends no requests on fresh data;
 - counts requests per UTC day in ``usage.json`` for the Setup page.
 """
@@ -29,6 +30,7 @@ USER_AGENT = f"d2bg/{__version__} (+https://github.com/Tajaddin/dota2-build-gene
 
 HOUR = 3600.0
 DAY = 24 * HOUR
+MAX_RETRY_AFTER = 60.0
 
 
 class OpenDotaError(RuntimeError):
@@ -73,7 +75,7 @@ class OpenDotaClient:
         self._wall = wall_clock
         self._sleep = sleep
         self._lock = threading.Lock()
-        self._last_request: float | None = None
+        self._next_slot: float | None = None
         self._http = httpx.Client(timeout=timeout, transport=transport, headers={"User-Agent": USER_AGENT})
         self.requests_made = 0
         self.cache_hits = 0
@@ -133,20 +135,21 @@ class OpenDotaClient:
 
     # ── requests ───────────────────────────────────────────────────
 
-    def _pace(self) -> None:
+    def _reserve(self) -> float:
+        """Claim the next request slot and return how long to wait for it. Called under the lock, which
+        only guards this bookkeeping: the caller sleeps after releasing it."""
         if self.remaining_day is not None and self.remaining_day <= self.daily_reserve:
             raise BudgetExhaustedError(
                 f"OpenDota daily allowance nearly used ({self.remaining_day} left, "
                 f"reserve {self.daily_reserve})"
             )
-        if self._last_request is not None:
-            wait = self.min_interval - (self._clock() - self._last_request)
-            if wait > 0:
-                self._sleep(wait)
+        now = self._clock()
+        start = now if self._next_slot is None else max(now, self._next_slot)
         if self.remaining_minute is not None and self.remaining_minute <= 1:
-            self._sleep(60.0)
+            start = max(start, now + 60.0)
             self.remaining_minute = None
-        self._last_request = self._clock()
+        self._next_slot = start + self.min_interval
+        return start - now
 
     def _read_limits(self, resp: httpx.Response) -> None:
         for header, attr in (
@@ -165,9 +168,11 @@ class OpenDotaClient:
         last_error = "no attempt made"
         for attempt in range(self.max_retries):
             with self._lock:
-                self._pace()
+                wait = self._reserve()
                 self.requests_made += 1
                 self._count_request()
+            if wait > 0:
+                self._sleep(wait)
             try:
                 resp = self._http.request(method, url, params=query)
             except httpx.HTTPError as exc:
@@ -178,8 +183,11 @@ class OpenDotaClient:
             if resp.status_code == 429:
                 retry_after = resp.headers.get("Retry-After", "")
                 delay = float(retry_after) if retry_after.isdigit() else 30.0 * (attempt + 1)
+                if retry_after.isdigit() and delay > MAX_RETRY_AFTER:
+                    raise OpenDotaError(f"{method} {path}: 429, OpenDota asks to wait {retry_after}s")
                 last_error = "429 Too Many Requests"
-                self._sleep(delay)
+                with self._lock:  # the next attempt, and every other caller, waits it out
+                    self._next_slot = max(self._next_slot or 0.0, self._clock() + min(delay, MAX_RETRY_AFTER))
                 continue
             if resp.status_code >= 500:
                 last_error = f"HTTP {resp.status_code}"
