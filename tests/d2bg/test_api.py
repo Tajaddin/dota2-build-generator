@@ -106,6 +106,12 @@ def test_other_host_names_are_refused(ctx, tmp_path, lan):
             assert local.get("/api/version").status_code == 200
 
 
+def test_refresh_budget_is_capped(client):
+    for calls in (0, 10**9):
+        body = {"steps": ["matchups"], "max_calls": calls}
+        assert client.post("/api/data/refresh", json=body).status_code == 422
+
+
 def test_live_stream_sends_a_snapshot(client, ctx):
     client.post("/gsi", json=_gsi(ctx))
     with client.stream("GET", "/api/live/stream?once=true") as r:
