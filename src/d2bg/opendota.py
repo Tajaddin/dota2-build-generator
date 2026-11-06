@@ -4,8 +4,9 @@ Every call goes through here so the app stays a polite API user:
 
 - at most one request per ``min_interval`` seconds (default 1.0 s, i.e. 60 a minute, the free limit);
 - reads ``X-Rate-Limit-Remaining-Minute`` and ``-Day`` and waits or stops before hitting them;
-- backs off on 429 (honouring ``Retry-After`` up to a minute, giving up beyond that) and retries 5xx
-  and network errors;
+- backs off on 429, honouring ``Retry-After`` up to a minute; a longer one fails the call, and every
+  call after it until that time has passed, without a request;
+- retries 5xx and network errors;
 - caches every GET on disk with a per-call lifetime, so a rerun spends no requests on fresh data;
 - counts requests per UTC day in ``usage.json`` for the Setup page.
 """
@@ -76,6 +77,7 @@ class OpenDotaClient:
         self._sleep = sleep
         self._lock = threading.Lock()
         self._next_slot: float | None = None
+        self._paused_until: float | None = None
         self._http = httpx.Client(timeout=timeout, transport=transport, headers={"User-Agent": USER_AGENT})
         self.requests_made = 0
         self.cache_hits = 0
@@ -144,6 +146,8 @@ class OpenDotaClient:
                 f"reserve {self.daily_reserve})"
             )
         now = self._clock()
+        if self._paused_until is not None and now < self._paused_until:
+            raise OpenDotaError(f"OpenDota asked for a pause ({self._paused_until - now:.0f}s more)")
         start = now if self._next_slot is None else max(now, self._next_slot)
         if self.remaining_minute is not None and self.remaining_minute <= 1:
             start = max(start, now + 60.0)
@@ -184,6 +188,8 @@ class OpenDotaClient:
                 retry_after = resp.headers.get("Retry-After", "")
                 delay = float(retry_after) if retry_after.isdigit() else 30.0 * (attempt + 1)
                 if retry_after.isdigit() and delay > MAX_RETRY_AFTER:
+                    with self._lock:
+                        self._paused_until = max(self._paused_until or 0.0, self._clock() + delay)
                     raise OpenDotaError(f"{method} {path}: 429, OpenDota asks to wait {retry_after}s")
                 last_error = "429 Too Many Requests"
                 with self._lock:  # the next attempt, and every other caller, waits it out

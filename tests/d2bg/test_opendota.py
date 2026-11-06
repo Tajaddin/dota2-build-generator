@@ -94,6 +94,21 @@ def test_long_retry_after_gives_up_instead_of_waiting(client, ft):
 
 
 @respx.mock
+def test_long_retry_after_holds_every_later_call(client, ft):
+    route = respx.get(f"{BASE}/x").mock(
+        side_effect=[httpx.Response(429, headers={"Retry-After": "86400"}), httpx.Response(200, json=1)]
+    )
+    with pytest.raises(OpenDotaError, match="wait 86400s"):
+        client.get("x", ttl=0)
+    ft.now += 86_000
+    with pytest.raises(OpenDotaError, match="400s more"):
+        client.get("x", ttl=0)
+    assert route.call_count == 1
+    ft.now += 400
+    assert client.get("x", ttl=0) == 1
+
+
+@respx.mock
 def test_429_without_retry_after_waits_at_most_a_minute(client, ft):
     respx.get(f"{BASE}/x").mock(return_value=httpx.Response(429))
     with pytest.raises(OpenDotaError, match="gave up"):
