@@ -72,7 +72,8 @@ def test_gsi_only_from_this_computer(ctx, tmp_path):
     app = create_app(ctx, lan=True, static_dir=tmp_path)
     token = ctx.settings.get().lan_token
     with TestClient(app, client=("192.168.1.20", 5000)) as phone:
-        assert phone.get("/api/version").status_code == 403
+        refused = phone.get("/api/version")
+        assert refused.status_code == 403 and "token" in refused.json()["detail"]
         assert phone.get(f"/api/version?token={token}").status_code == 200
         assert phone.post(f"/gsi?token={token}", json=_gsi(ctx)).status_code == 403
 
@@ -112,12 +113,15 @@ def test_reads_from_other_websites_are_refused(live_client, ctx):
 @pytest.mark.parametrize("lan", [False, True])
 def test_other_host_names_are_refused(ctx, tmp_path, lan):
     # DNS rebinding: a site resolves its own name to 127.0.0.1, so the connection is local but the Host is not.
-    app = create_app(ctx, lan=lan, static_dir=tmp_path)
-    with TestClient(app, base_url="http://attacker.example:4242") as rebound:
+    app = create_app(ctx, port=4343, lan=lan, static_dir=tmp_path)
+    with TestClient(app, base_url="http://attacker.example:4343") as rebound:
         assert rebound.get("/api/settings").status_code == 403
-        assert rebound.get("/api/version").status_code == 403
+        refused = rebound.get("/api/version")
+        # The same refusal reaches someone on this computer who opened the app under its network name.
+        assert refused.status_code == 403
+        assert refused.json()["detail"] == "Open the app at http://127.0.0.1:4343"
         assert rebound.put("/api/settings", json={"account_id": 1}).status_code == 403
-    for name in ("http://localhost:4242", "http://[::1]:4242"):
+    for name in ("http://localhost:4343", "http://[::1]:4343"):
         with TestClient(app, base_url=name) as local:
             assert local.get("/api/version").status_code == 200
 

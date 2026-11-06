@@ -86,7 +86,12 @@ def create_app(
                 or ""
             )
             if not lan or not hmac.compare_digest(token, settings.lan_token):
-                return JSONResponse({"detail": "LAN access needs the token from Settings"}, status_code=403)
+                detail = (
+                    f"Open the app at http://127.0.0.1:{port}"  # this computer, under a non-localhost name
+                    if client in LOOPBACK
+                    else "LAN access needs the token from Settings"
+                )
+                return JSONResponse({"detail": detail}, status_code=403)
             response = await call_next(request)
             response.set_cookie("d2bg_token", settings.lan_token, httponly=True, samesite="strict")
             return response
