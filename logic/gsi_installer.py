@@ -1,10 +1,27 @@
 """Install GSI config into Dota 2 game folder."""
 import os
 import re
+import secrets
 from pathlib import Path
 from typing import Optional
 
-GSI_AUTH_TOKEN = "buildgen_auth"
+# This install's GSI token, created on first use. Dota sends it with every update.
+TOKEN_FILE = Path(__file__).resolve().parent.parent / "data" / "gsi_token"
+
+
+def load_or_create_token(path: Optional[Path] = None) -> str:
+    """Read this install's GSI token, creating a random one the first time."""
+    path = path or TOKEN_FILE
+    try:
+        token = path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        token = ""
+    if not token:
+        token = secrets.token_urlsafe(24)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(token, encoding="utf-8")
+    return token
+
 
 GSI_CONFIG = '''"dota2-build-generator"
 {
@@ -30,7 +47,7 @@ GSI_CONFIG = '''"dota2-build-generator"
         "allheroes"     "1"
     }
 }
-'''.replace("__BUILDGEN_AUTH_TOKEN__", GSI_AUTH_TOKEN)
+'''
 
 CONFIG_FILENAME = "gamestate_integration_buildgen.cfg"
 
@@ -103,7 +120,7 @@ def install_gsi_config(dota2_path: Optional[Path] = None) -> tuple[bool, str]:
     cfg_file = cfg_dir / CONFIG_FILENAME
     try:
         with open(cfg_file, "w", encoding="utf-8") as f:
-            f.write(GSI_CONFIG)
+            f.write(GSI_CONFIG.replace("__BUILDGEN_AUTH_TOKEN__", load_or_create_token()))
     except PermissionError:
         return False, f"Permission denied writing file: {cfg_file}"
 
@@ -121,7 +138,8 @@ def is_gsi_installed(dota2_path: Optional[Path] = None) -> bool:
 
 
 def is_gsi_outdated(dota2_path: Optional[Path] = None) -> bool:
-    """Check if installed GSI config is missing required fields from latest template."""
+    """Check if installed GSI config is missing required fields from latest template,
+    or carries another token than this install's."""
     if dota2_path is None:
         dota2_path = find_dota2_path()
     if dota2_path is None:
@@ -136,6 +154,7 @@ def is_gsi_outdated(dota2_path: Optional[Path] = None) -> bool:
             '"buffer"            "0.1"',
             '"allplayers"',
             '"allheroes"',
+            f'"{load_or_create_token()}"',
         ]
         return any(field not in content for field in required_fields)
     except Exception:

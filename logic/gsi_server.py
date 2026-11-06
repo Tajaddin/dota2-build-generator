@@ -1,11 +1,10 @@
 """HTTP server that receives Dota 2 Game State Integration data."""
+import hmac
 import json
 import time
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Callable, Optional
-
-from logic.gsi_installer import GSI_AUTH_TOKEN
 
 MAX_BODY_BYTES = 1024 * 1024
 
@@ -59,7 +58,7 @@ class GSIServer:
     """Receives Dota 2 Game State Integration data via HTTP POST.
 
     Usage:
-        server = GSIServer(port=4001, on_update=my_callback)
+        server = GSIServer(port=4001, on_update=my_callback, expected_auth_token=load_or_create_token())
         server.start()
         # ... server runs in background thread ...
         server.stop()
@@ -69,8 +68,10 @@ class GSIServer:
         self,
         port: int = 4001,
         on_update: Optional[Callable] = None,
-        expected_auth_token: Optional[str] = GSI_AUTH_TOKEN,
+        *,
+        expected_auth_token: Optional[str],
     ):
+        """``expected_auth_token`` is the token in the installed GSI config; None turns the check off."""
         self.port = port
         self.on_update = on_update
         self.expected_auth_token = expected_auth_token
@@ -90,7 +91,9 @@ class GSIServer:
             return False, "missing auth block"
 
         token = auth.get("token")
-        if token != self.expected_auth_token:
+        if not isinstance(token, str) or not hmac.compare_digest(
+            token.encode("utf-8"), self.expected_auth_token.encode("utf-8")
+        ):
             return False, "invalid auth token"
 
         return True, "ok"

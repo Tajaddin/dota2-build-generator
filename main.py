@@ -16,7 +16,9 @@ from pathlib import Path
 from logic.data_loader import DataLoader
 from logic.gsi_server import GSIServer
 from logic.gsi_parser import GSIParser
-from logic.gsi_installer import install_gsi_config, is_gsi_installed, is_gsi_outdated, find_dota2_path
+from logic.gsi_installer import (
+    install_gsi_config, is_gsi_installed, is_gsi_outdated, find_dota2_path, load_or_create_token,
+)
 from logic.item_recommender import ItemRecommender
 from logic.item_threat_analyzer import ItemThreatAnalyzer
 from logic.ai_recommender import AIRecommender
@@ -109,7 +111,9 @@ class DotaBuildApp(ctk.CTk):
         print(f"[App] Loaded {hero_count} heroes and {item_count} items")
 
         # GSI components
-        self.gsi_server = GSIServer(port=4001, on_update=self._on_gsi_update)
+        self.gsi_server = GSIServer(
+            port=4001, on_update=self._on_gsi_update, expected_auth_token=load_or_create_token()
+        )
         self.gsi_parser = GSIParser(self.data_dir)
         self.recommender = ItemRecommender(self.data_dir)
         self.ai_recommender = AIRecommender(self.data_dir)

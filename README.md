@@ -148,9 +148,13 @@ Playwright against the real server and demo match, and the v1 desktop app's test
 
 ## The v1 desktop app
 
-The original Tk app is still here (`main.py`, `logic/`, `ml/`, `ui/`), unchanged. Its hero data
+The original Tk app is still here (`main.py`, `logic/`, `ml/`, `ui/`). Its hero data
 files were never committed, so it runs on fallbacks. Run it with `pip install -r requirements.txt`
 and `python main.py`. Its tests run in CI.
+
+Its GSI listener takes updates only from this computer (`127.0.0.1:4001`) and only with a token
+generated for each install (`data/gsi_token`). A GSI config written by an older version carries the
+old shared token: starting the live overlay rewrites it, then restart Dota 2.
 
 ## License
 
