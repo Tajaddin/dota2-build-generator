@@ -22,6 +22,7 @@ LOOPBACK = {"127.0.0.1", "::1", "localhost", "testclient"}
 # web page that rebound its own domain to 127.0.0.1, so it is treated like another device.
 LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]"}
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+OTHER_SITES = {"cross-site", "same-site"}
 
 NOT_BUILT = """<!doctype html><html><head><meta charset="utf-8"><title>d2bg</title></head>
 <body style="font-family:system-ui;background:#111;color:#eee;padding:2rem">
@@ -39,6 +40,13 @@ def _cross_origin(request: Request) -> bool:
     """A browser sent this from a page on another origin. Requests without Origin (Dota, curl) pass."""
     origin = request.headers.get("origin")
     return origin is not None and urlsplit(origin.lower()).netloc != request.headers.get("host", "").lower()
+
+
+def _cross_site(request: Request) -> bool:
+    """A browser sent this API call for a page on another site, e.g. an <img> pointed at /api/matches/1,
+    which carries no Origin. Browsers send Sec-Fetch-Site on every request; Dota and curl do not."""
+    path = request.url.path
+    return path.startswith(("/api/", "/gsi")) and request.headers.get("sec-fetch-site") in OTHER_SITES
 
 
 def create_app(
@@ -64,8 +72,9 @@ def create_app(
     @app.middleware("http")
     async def lan_guard(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         """Other devices (LAN mode) must present the LAN token; this computer, addressed by a localhost
-        name, never needs one. Writes sent by pages on other origins are refused."""
-        if request.method not in SAFE_METHODS and _cross_origin(request):
+        name, never needs one. API calls from pages on other sites, and writes from other origins, are
+        refused."""
+        if _cross_site(request) or (request.method not in SAFE_METHODS and _cross_origin(request)):
             return JSONResponse({"detail": "Requests from other websites are refused"}, status_code=403)
         client = request.client.host if request.client else ""
         if client not in LOOPBACK or _host_name(request.headers.get("host", "")) not in LOCAL_HOSTS:

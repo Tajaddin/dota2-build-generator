@@ -84,13 +84,29 @@ def test_lan_off_rejects_other_devices(ctx, tmp_path):
 
 
 def test_writes_from_other_websites_are_refused(client):
-    # A page on any site can send these without a CORS preflight; the parse request spends his API key.
+    # A page on any site can send these without a CORS preflight; the parse request spends the OpenDota key.
     simple = {"Origin": "https://evil.example", "Content-Type": "text/plain"}
     for path in ("/api/live/reset", "/api/replay/stop", "/api/matches/1/parse"):
         assert client.post(path, headers=simple, content=b"").status_code == 403
     assert client.post("/api/live/reset", headers={"Origin": "null"}).status_code == 403
     assert client.post("/api/live/reset", headers={"Origin": LOCAL}).json() == {"ok": True}
     assert client.post("/api/live/reset").json() == {"ok": True}  # no Origin: Dota, curl, scripts
+
+
+def test_reads_from_other_websites_are_refused(live_client, ctx):
+    # An <img> or <script> on any page makes the browser GET these with no Origin header, and a new
+    # match ID costs an OpenDota request. Browsers mark such requests with Sec-Fetch-Site.
+    with respx.mock(assert_all_called=False) as opendota:
+        upstream = opendota.get(f"{BASE}/matches/1").mock(return_value=httpx.Response(404))
+        for site in ("cross-site", "same-site"):
+            other = {"Sec-Fetch-Site": site}
+            assert live_client.get("/api/matches/1", headers=other).status_code == 403
+            assert live_client.post("/gsi", headers=other, json=_gsi(ctx)).status_code == 403
+    assert upstream.call_count == 0
+    for site in ("same-origin", "none"):  # the app's own pages, and a URL typed into the address bar
+        assert live_client.get("/api/version", headers={"Sec-Fetch-Site": site}).status_code == 200
+    link = {"Sec-Fetch-Site": "cross-site"}  # a link on another site still opens the app itself
+    assert live_client.get("/", headers=link).status_code == 200
 
 
 @pytest.mark.parametrize("lan", [False, True])
