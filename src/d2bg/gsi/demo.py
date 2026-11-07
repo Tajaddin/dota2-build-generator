@@ -7,6 +7,7 @@ hero's pro build order and skilling from the pro skill order when that data exis
 
 from __future__ import annotations
 
+import json
 import random
 from collections.abc import Sequence
 from typing import Any
@@ -63,17 +64,21 @@ def demo_frames(
             **extra,
         }
 
-    # Hero selection: draft fills in pick by pick.
-    t = 0.0
-    for k in range(1, 11):
-        r_picks = allies[: (k + 1) // 2]
-        d_picks = enemies[: k // 2]
-        draft = {
-            "activeteam": 2 if k % 2 else 3,
-            "activeteam_time_remaining": 20,
-            "team2": {f"pick{i}_id": h for i, h in enumerate(r_picks)},
-            "team3": {f"pick{i}_id": h for i, h in enumerate(d_picks)},
+    # Hero selection, shaped like a real player's GSI (checked against his recorded ranked games):
+    # the draft block stays empty, bans arrive as chat announcements, and his hero appears once picked.
+    bans = pool[9:13]
+    ban_events = [
+        {
+            "game_time": 23,
+            "event_type": "generic_event",
+            "data": json.dumps(
+                {"type": "CHAT_MESSAGE_HERO_BANNED", "value": b, "playerid1": -1, "playerid2": -1}
+            ),
         }
+        for b in bans
+    ]
+    t = 0.0
+    for k in range(10):
         frames.append(
             (
                 t,
@@ -82,11 +87,13 @@ def demo_frames(
                     "map": {
                         "matchid": DEMO_MATCH_ID,
                         "game_state": "DOTA_GAMERULES_STATE_HERO_SELECTION",
-                        "clock_time": -120,
+                        "clock_time": -120 + 5 * k,
                         "daytime": True,
                     },
                     "player": player({}),
-                    "draft": draft,
+                    "hero": {"id": hero.id, "name": hero.npc} if k >= 5 else {"id": 0},
+                    "draft": {},
+                    "events": ban_events[: k + 1],
                 },
             )
         )
@@ -220,6 +227,23 @@ def demo_frames(
             },
             "items": inventory,
             "events": [e for e in events if e["game_time"] <= clock],
+            "draft": {},
+            # After loading the minimap shows the allies, and each enemy once "seen" (one a minute here).
+            "minimap": {
+                **{
+                    f"o{i}": {
+                        "unitname": heroes.require(h).npc,
+                        "team": 2,
+                        "image": "minimap_herocircle_self" if h == hero.id else "minimap_herocircle",
+                    }
+                    for i, h in enumerate(allies)
+                },
+                **{
+                    f"o{10 + i}": {"unitname": heroes.require(h).npc, "team": 3, "image": "minimap_enemyicon"}
+                    for i, h in enumerate(enemies)
+                    if clock >= 60 * i
+                },
+            },
         }
         frames.append((t, payload))
         clock += step
@@ -230,9 +254,15 @@ def demo_frames(
     return frames
 
 
-def demo_draft(frames: Sequence[tuple[float, dict[str, Any]]]) -> dict[str, list[int]]:
-    """The full draft of a demo match (for tests)."""
+def demo_draft(frames: Sequence[tuple[float, dict[str, Any]]], ctx: AppContext) -> dict[str, list[int]]:
+    """The demo's teams, read back from the last minimap (for tests)."""
+    ids = {h.key: h.id for h in ctx.data.heroes}
     for _, p in reversed(frames):
-        if "draft" in p:
-            return {"radiant": list(p["draft"]["team2"].values()), "dire": list(p["draft"]["team3"].values())}
+        mm = p.get("minimap") or {}
+        if mm:
+            teams: dict[str, list[int]] = {"radiant": [], "dire": []}
+            for obj in mm.values():
+                side = "radiant" if obj["team"] == 2 else "dire"
+                teams[side].append(ids[obj["unitname"].removeprefix("npc_dota_hero_")])
+            return teams
     return {"radiant": [], "dire": []}

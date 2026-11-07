@@ -1199,3 +1199,9 @@ code {
 .check input {
   margin-top: 0.2rem;
 }
+
+/* Wide tables scroll inside their panel on narrow screens instead of pushing the page sideways. */
+.panel {
+  min-width: 0;
+  overflow-x: auto;
+}

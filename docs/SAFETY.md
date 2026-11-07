@@ -33,8 +33,11 @@ process, input, capture or Windows-API libraries (`ctypes`, `pymem`, `pynput`, `
 
 1. **GSI is Valve's own interface.** Dota 2 ships with it. You enable it by placing a config file in
    the `gamestate_integration` folder, and the game decides what to send. While you play, it sends
-   only your own hero, items, abilities and the match clock. Data about all ten players is sent only
-   when you spectate or cast. The app shows enemy items only in that case.
+   your own hero, items and abilities, the match clock, the chat's announcements (bans, kills,
+   purchases) as `events`, and what your minimap shows as `minimap`: allies after loading, and enemies
+   only while you can see them. Its `draft` block stays empty for a player (checked in his recorded
+   ranked games), so the app never knows the enemy picks during the draft. Data about all ten players,
+   including their items, is sent only when you spectate or cast; the app shows enemy items only then.
 2. **Valve's 2023 ban wave targeted reading hidden client data.** In February 2023 Valve banned over
    40,000 accounts for third-party software that read information from the game client that players
    cannot see ("Cheaters Will Never Be Welcome in Dota",

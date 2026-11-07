@@ -8,6 +8,7 @@ optional: the game leaves blocks out depending on the moment.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from typing import Any
@@ -144,6 +145,25 @@ class GameEvent:
     game_time: float | None
     team: str | None
     data: dict[str, Any]
+    # "generic_event"s carry a JSON string with the chat announcement's type and a value, for example
+    # {"type": "CHAT_MESSAGE_HERO_BANNED", "value": 25}: the same line the in-game chat shows.
+    subtype: str | None = None
+    value: int | None = None
+
+
+@dataclass
+class MinimapUnit:
+    """A hero on the player's minimap, as the GSI ``minimap`` block reports it.
+
+    ``image`` tells what the minimap draws: ``minimap_herocircle`` for allies, ``..._self`` for the
+    player, ``minimap_enemyicon`` for an enemy currently seen. During hero selection the block also
+    lists draft-screen models with no meaningful team, so callers check the phase first.
+    """
+
+    hero_id: int | None
+    hero_key: str
+    team: int | None
+    image: str
 
 
 @dataclass
@@ -177,6 +197,7 @@ class GameState:
     spectating: bool = False
     players: list[OtherPlayer] = field(default_factory=list)
     events: list[GameEvent] = field(default_factory=list)
+    minimap: list[MinimapUnit] = field(default_factory=list)
     blocks: list[str] = field(default_factory=list)
 
     @property
@@ -279,6 +300,40 @@ def _draft(raw: Mapping[str, Any]) -> DraftState | None:
     return d
 
 
+def _generic(data: Any) -> tuple[str | None, int | None]:
+    """(type, value) of a generic_event's JSON payload; (None, None) when it is not one."""
+    if not isinstance(data, str):
+        return None, None
+    try:
+        doc = json.loads(data)
+    except json.JSONDecodeError:
+        return None, None
+    if not isinstance(doc, Mapping):
+        return None, None
+    kind = doc.get("type")
+    return (kind if isinstance(kind, str) else None), _int(doc.get("value"))
+
+
+def _minimap(raw: Mapping[str, Any], hero_ids: Mapping[str, int]) -> list[MinimapUnit]:
+    out = []
+    for obj in raw.values():
+        if not isinstance(obj, Mapping):
+            continue
+        name = obj.get("unitname")
+        if not isinstance(name, str) or not name.startswith("npc_dota_hero_"):
+            continue
+        key = name.removeprefix("npc_dota_hero_")
+        out.append(
+            MinimapUnit(
+                hero_id=hero_ids.get(key),
+                hero_key=key,
+                team=_int(obj.get("team")),
+                image=str(obj.get("image") or ""),
+            )
+        )
+    return out
+
+
 def _spectated_players(payload: Mapping[str, Any], hero_ids: Mapping[str, int]) -> list[OtherPlayer]:
     players_block, heroes_block, items_block = (
         _dict(payload.get("player")),
@@ -337,14 +392,18 @@ def parse(
     )
     for e in payload.get("events") or []:
         if isinstance(e, Mapping) and isinstance(e.get("event_type"), str):
+            subtype, value = _generic(e.get("data"))
             state.events.append(
                 GameEvent(
                     type=e["event_type"],
                     game_time=_float(e.get("game_time")),
                     team=e.get("team"),
                     data={k: v for k, v in e.items() if k not in ("event_type", "game_time", "team")},
+                    subtype=subtype,
+                    value=value,
                 )
             )
+    state.minimap = _minimap(_dict(payload.get("minimap")), hero_ids)
     if spectating:
         state.players = _spectated_players(payload, hero_ids)
         return state

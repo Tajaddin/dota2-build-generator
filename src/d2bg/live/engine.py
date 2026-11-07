@@ -55,6 +55,12 @@ NOTABLE_ITEMS = frozenset(
         "invis_sword",
     }
 )
+PLAYER_NOTE = (
+    "Dota does not send a player the other picks during the draft (its GSI draft block stays empty), so "
+    "add allies and enemies by hand until the game loads. Your hero, your team and the bans fill in by "
+    "themselves; after loading, allies fill in from the minimap, and enemies as soon as you see them."
+)
+SPECTATOR_NOTE = "Spectating: Dota sends the whole draft, so both teams fill in by themselves."
 SERIES_EVERY = 30.0
 MAX_ALERTS = 60
 STALE_AFTER = 30.0
@@ -119,7 +125,7 @@ class LiveEngine:
         self._fired: set[str] = set()
         self.series: list[dict[str, Any]] = []
         self.event_log: list[dict[str, Any]] = []
-        self._seen_events: set[tuple[str, float | None]] = set()
+        self._seen_events: set[tuple[str, str | None, int | None, float | None]] = set()
         self._enemy_items: dict[tuple[str, str], set[str]] = {}
         self._post_game_sent = False
         self.draft_seen: dict[str, list[int]] = {
@@ -127,7 +133,10 @@ class LiveEngine:
             "dire": [],
             "radiant_bans": [],
             "dire_bans": [],
+            "bans": [],  # from the chat's ban announcements, which do not say which team banned
         }
+        self.own_hero: int | None = None
+        self.draft_sources: dict[str, str] = {}
 
     def reset(self) -> None:
         with self._lock:
@@ -182,11 +191,17 @@ class LiveEngine:
         self.timers.daytime = s.daytime
         # Game events.
         for e in s.events:
-            key = (e.type, e.game_time)
+            # Dota repeats recent events in every payload; several announcements can share a timestamp.
+            key = (e.type, e.subtype, e.value, e.game_time)
             if key in self._seen_events:
                 continue
             self._seen_events.add(key)
             t = e.game_time if e.game_time is not None else clock
+            if e.subtype == "CHAT_MESSAGE_HERO_BANNED" and e.value and e.value not in self.draft_seen["bans"]:
+                self.draft_seen["bans"].append(e.value)
+                self.draft_sources["bans"] = "ban announcements in the game chat"
+            if e.type == "generic_event":
+                continue  # chat announcements (bans, purchases, kills) stay out of the event log
             self.event_log.append(
                 {"type": e.type, "clock": t, "clock_text": fmt(t) if t is not None else None, "team": e.team}
             )
@@ -223,8 +238,8 @@ class LiveEngine:
                             f"{who} bought {name}",
                         )
                 self._enemy_items[(p.team, p.slot)] = have
-        elif s.hero and s.hero.id and s.team and s.hero.id not in self.draft_seen[s.team]:
-            self.draft_seen[s.team].insert(0, s.hero.id)
+        else:
+            self._track_player_draft(s)
         # Series for the chart.
         if (
             clock is not None
@@ -249,6 +264,40 @@ class LiveEngine:
             self._alert(f"end:{s.match_id}", "event", "Match over. The review opens once OpenDota has it.")
             if self.on_post_game is not None and self.source == "game":
                 self.on_post_game(s.match_id)
+
+    def _track_player_draft(self, s: GameState) -> None:
+        """What a player's GSI tells about the draft (checked against his recorded ranked games).
+
+        - his own hero and team: the ``hero`` and ``player`` blocks, as soon as he picks;
+        - allies: the minimap after loading, drawn as ``minimap_herocircle`` with his team number;
+        - enemies: the minimap after loading, ``minimap_enemyicon``, once he has seen them.
+        During hero selection the minimap also lists draft-screen models with no team, so it is only
+        read from pre-game on. Dota sends a player no ``draft`` block content at all.
+        """
+        if s.hero and s.hero.id:
+            if self.own_hero != s.hero.id and self.own_hero is not None:
+                for side in ("radiant", "dire"):  # a repick or swap replaces his old hero
+                    if self.own_hero in self.draft_seen[side]:
+                        self.draft_seen[side].remove(self.own_hero)
+            self.own_hero = s.hero.id
+            self.draft_sources["you"] = "your hero and team from the game"
+        if s.phase not in ("pre_game", "in_game", "post_game") or s.team is None:
+            return
+        mine = 2 if s.team == "radiant" else 3
+        their_side = "dire" if s.team == "radiant" else "radiant"
+        for unit in s.minimap:
+            if not unit.hero_id or unit.hero_id == self.own_hero:
+                continue
+            if unit.team == mine and unit.image.startswith("minimap_herocircle"):
+                side = s.team
+                self.draft_sources["allies"] = "allies from the minimap after loading"
+            elif unit.team is not None and unit.team != mine and unit.image == "minimap_enemyicon":
+                side = their_side
+                self.draft_sources["enemies"] = "enemies from the minimap once you see them"
+            else:
+                continue
+            if unit.hero_id not in self.draft_seen[side]:
+                self.draft_seen[side].append(unit.hero_id)
 
     # ── actions from the UI ────────────────────────────────────────
 
@@ -484,12 +533,21 @@ class LiveEngine:
         # Draft and counters.
         our_side = s.team or "radiant"
         their_side = "dire" if our_side == "radiant" else "radiant"
-        allies, enemies = self.draft_seen[our_side], self.draft_seen[their_side]
+        own = [self.own_hero] if self.own_hero and not s.spectating else []
+        allies = own + [h for h in self.draft_seen[our_side] if h not in own]
+        enemies = [h for h in self.draft_seen[their_side] if h not in own]
+        bans: list[int] = []
+        for h in self.draft_seen["radiant_bans"] + self.draft_seen["dire_bans"] + self.draft_seen["bans"]:
+            if h not in bans and h not in allies and h not in enemies:
+                bans.append(h)
         out["draft"] = {
-            "allies": allies,
-            "enemies": enemies,
+            "allies": allies[:5],
+            "enemies": enemies[:5],
             "side": our_side,
-            "bans": self.draft_seen["radiant_bans"] + self.draft_seen["dire_bans"],
+            "side_known": s.team is not None or s.spectating,
+            "bans": bans,
+            "sources": dict(self.draft_sources),
+            "note": SPECTATOR_NOTE if s.spectating else PLAYER_NOTE,
         }
         if enemies:
             out["situational_items"] = situational_items(
