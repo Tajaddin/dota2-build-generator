@@ -15,6 +15,7 @@ from d2bg.api.app import create_app
 from tests.d2bg.test_gsi import PLAYING, _fake_steam
 
 BASE = "https://api.opendota.com/api"
+LOCAL = "http://127.0.0.1:4242"
 
 
 @pytest.fixture
@@ -24,7 +25,7 @@ def app(ctx, tmp_path):
 
 @pytest.fixture
 def client(app):
-    with TestClient(app) as c:
+    with TestClient(app, base_url=LOCAL) as c:
         yield c
 
 
@@ -46,7 +47,7 @@ def test_spa_serves_built_files(ctx, tmp_path):
     (dist / "assets").mkdir(parents=True)
     (dist / "index.html").write_text("<html>app</html>")
     (dist / "assets" / "a.js").write_text("js")
-    with TestClient(create_app(ctx, static_dir=dist)) as c:
+    with TestClient(create_app(ctx, static_dir=dist), base_url=LOCAL) as c:
         assert c.get("/").text == "<html>app</html>"
         assert c.get("/live/anything").text == "<html>app</html>"
         assert c.get("/assets/a.js").text == "js"
@@ -71,7 +72,8 @@ def test_gsi_only_from_this_computer(ctx, tmp_path):
     app = create_app(ctx, lan=True, static_dir=tmp_path)
     token = ctx.settings.get().lan_token
     with TestClient(app, client=("192.168.1.20", 5000)) as phone:
-        assert phone.get("/api/version").status_code == 403
+        refused = phone.get("/api/version")
+        assert refused.status_code == 403 and "token" in refused.json()["detail"]
         assert phone.get(f"/api/version?token={token}").status_code == 200
         assert phone.post(f"/gsi?token={token}", json=_gsi(ctx)).status_code == 403
 
@@ -80,6 +82,54 @@ def test_lan_off_rejects_other_devices(ctx, tmp_path):
     with TestClient(create_app(ctx, lan=False, static_dir=tmp_path), client=("10.0.0.2", 1)) as other:
         token = ctx.settings.get().lan_token
         assert other.get(f"/api/version?token={token}").status_code == 403
+
+
+def test_writes_from_other_websites_are_refused(client):
+    # A page on any site can send these without a CORS preflight; the parse request spends the OpenDota key.
+    simple = {"Origin": "https://evil.example", "Content-Type": "text/plain"}
+    for path in ("/api/live/reset", "/api/replay/stop", "/api/matches/1/parse"):
+        assert client.post(path, headers=simple, content=b"").status_code == 403
+    assert client.post("/api/live/reset", headers={"Origin": "null"}).status_code == 403
+    assert client.post("/api/live/reset", headers={"Origin": LOCAL}).json() == {"ok": True}
+    assert client.post("/api/live/reset").json() == {"ok": True}  # no Origin: Dota, curl, scripts
+
+
+def test_reads_from_other_websites_are_refused(live_client, ctx):
+    # An <img> or <script> on any page makes the browser GET these with no Origin header, and a new
+    # match ID costs an OpenDota request. Browsers mark such requests with Sec-Fetch-Site.
+    with respx.mock(assert_all_called=False) as opendota:
+        upstream = opendota.get(f"{BASE}/matches/1").mock(return_value=httpx.Response(404))
+        for site in ("cross-site", "same-site"):
+            other = {"Sec-Fetch-Site": site}
+            assert live_client.get("/api/matches/1", headers=other).status_code == 403
+            assert live_client.post("/gsi", headers=other, json=_gsi(ctx)).status_code == 403
+    assert upstream.call_count == 0
+    for site in ("same-origin", "none"):  # the app's own pages, and a URL typed into the address bar
+        assert live_client.get("/api/version", headers={"Sec-Fetch-Site": site}).status_code == 200
+    link = {"Sec-Fetch-Site": "cross-site"}  # a link on another site still opens the app itself
+    assert live_client.get("/", headers=link).status_code == 200
+
+
+@pytest.mark.parametrize("lan", [False, True])
+def test_other_host_names_are_refused(ctx, tmp_path, lan):
+    # DNS rebinding: a site resolves its own name to 127.0.0.1, so the connection is local but the Host is not.
+    app = create_app(ctx, port=4343, lan=lan, static_dir=tmp_path)
+    with TestClient(app, base_url="http://attacker.example:4343") as rebound:
+        assert rebound.get("/api/settings").status_code == 403
+        refused = rebound.get("/api/version")
+        # The same refusal reaches someone on this computer who opened the app under its network name.
+        assert refused.status_code == 403
+        assert refused.json()["detail"] == "Open the app at http://127.0.0.1:4343"
+        assert rebound.put("/api/settings", json={"account_id": 1}).status_code == 403
+    for name in ("http://localhost:4343", "http://[::1]:4343"):
+        with TestClient(app, base_url=name) as local:
+            assert local.get("/api/version").status_code == 200
+
+
+def test_refresh_budget_is_capped(client):
+    for calls in (0, 10**9):
+        body = {"steps": ["matchups"], "max_calls": calls}
+        assert client.post("/api/data/refresh", json=body).status_code == 422
 
 
 def test_live_stream_sends_a_snapshot(client, ctx):
@@ -205,7 +255,7 @@ def live_client(ctx, tmp_path, monkeypatch):
     from d2bg.opendota import OpenDotaClient
 
     ctx._client = OpenDotaClient(cache_dir=tmp_path / "odcache", min_interval=0, sleep=lambda s: None)
-    with TestClient(create_app(ctx, static_dir=tmp_path)) as c:
+    with TestClient(create_app(ctx, static_dir=tmp_path), base_url=LOCAL) as c:
         yield c
 
 

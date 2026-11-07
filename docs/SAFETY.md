@@ -10,7 +10,7 @@ sends input, and the only file it writes into the Dota folder is the GSI config.
 |---|---|---|
 | `<Dota 2>\game\dota\cfg\gamestate_integration\gamestate_integration_d2bg.cfg` | Written when you click **Install** on the Setup page; deleted when you click **Remove** | This file is how Valve's GSI is switched on. The game reads it and starts sending JSON to the address inside it. |
 | `<Steam>\steamapps\libraryfolders.vdf` and the registry value `HKCU\Software\Valve\Steam\SteamPath` | Read only | To find which drive Dota is installed on. |
-| `http://127.0.0.1:4242` | A local web server: Dota POSTs GSI JSON to `/gsi`; your browser loads the UI | Loopback only by default. LAN mode (for a phone) is opt-in and needs a token. |
+| `http://127.0.0.1:4242` | A local web server: Dota POSTs GSI JSON to `/gsi`; your browser loads the UI | Loopback only by default. LAN mode (for a phone) is opt-in and needs a token. Other websites open in your browser can't use it: it answers only to localhost names, refuses writes from other origins, and refuses API calls the browser marks as sent for another site (`Sec-Fetch-Site`, which current browsers send). |
 | `https://api.opendota.com` | HTTPS requests, about 1 per second at most, cached on disk | Hero, item, meta, matchup and benchmark data, your public profile and matches, replay-parse requests. |
 | `https://cdn.cloudflare.steamstatic.com` | Image downloads by your browser | Hero and item pictures from Valve's public CDN. |
 | `%LOCALAPPDATA%\d2bg\` | Read and write | Settings, API cache, refreshed data, GSI recordings. |

@@ -42,6 +42,9 @@ Thumbs.db
 # API response caches
 data/cache/
 
+# v1 GSI token, generated per install
+data/gsi_token
+
 # v2 tooling and build output
 .mypy_cache/
 .ruff_cache/

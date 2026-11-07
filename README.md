@@ -14,7 +14,7 @@ review. It listens only to what Dota 2 sends through Valve's **Game State Integr
 | Live engine | p50 **0.34 ms**, p95 0.65 ms per GSI update | `bench/latency.py`: 2,526 synthetic payloads, in process, on this PC (Windows 11, Core i5-13600KF, 32 GB). `reports/latency.json` |
 | GSI round trip | p50 **1.7 ms**, p95 2.3 ms | The same payloads POSTed to `/gsi` over loopback HTTP, token check included |
 | Draft analysis | p50 **4.3 ms**, p95 6.2 ms | 300 random drafts with 0 to 5 heroes a side |
-| Tests | 161 Python tests (94% line coverage), 6 Vitest, 6 Playwright end-to-end, 21 v1 tests | All run in CI on every push |
+| Tests | 171 Python tests (94% line coverage), 6 Vitest, 6 Playwright end-to-end, 25 v1 tests | All run in CI on every push |
 | Data snapshot | 127 heroes, 409 items, 35,074 ranked matches, 2,306 pro matches (22,687 hero-games) since 2026-06-21, patch 7.41 | `data/snapshot/manifest.json` |
 | Full data refresh | about 650 OpenDota requests (the free limit is about 3,000 a day) | Measured on 2026-10-19 |
 | UI bundle | 113 KB of JavaScript and 4 KB of CSS, gzipped | `npm run build` |
@@ -148,9 +148,13 @@ Playwright against the real server and demo match, and the v1 desktop app's test
 
 ## The v1 desktop app
 
-The original Tk app is still here (`main.py`, `logic/`, `ml/`, `ui/`), unchanged. Its hero data
+The original Tk app is still here (`main.py`, `logic/`, `ml/`, `ui/`). Its hero data
 files were never committed, so it runs on fallbacks. Run it with `pip install -r requirements.txt`
 and `python main.py`. Its tests run in CI.
+
+Its GSI listener takes updates only from this computer (`127.0.0.1:4001`) and only with a token
+generated for each install (`data/gsi_token`). A GSI config written by an older version carries the
+old shared token: starting the live overlay rewrites it, then restart Dota 2.
 
 ## License
 

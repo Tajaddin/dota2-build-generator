@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import threading
+
 import httpx
 import pytest
 import respx
@@ -82,6 +84,99 @@ def test_429_backs_off_with_retry_after(client, ft):
     assert client.get("x", ttl=0) == {"ok": True}
     assert route.call_count == 2
     assert 7.0 in ft.slept
+
+
+@respx.mock
+def test_long_retry_after_gives_up_instead_of_waiting(client, ft):
+    route = respx.get(f"{BASE}/x").mock(return_value=httpx.Response(429, headers={"Retry-After": "86400"}))
+    with pytest.raises(OpenDotaError, match="wait 86400s"):
+        client.get("x", ttl=0)
+    assert route.call_count == 1
+    assert ft.slept == []
+
+
+@respx.mock
+def test_long_retry_after_holds_every_later_call(client, ft):
+    route = respx.get(f"{BASE}/x").mock(
+        side_effect=[httpx.Response(429, headers={"Retry-After": "86400"}), httpx.Response(200, json=1)]
+    )
+    with pytest.raises(OpenDotaError, match="wait 86400s"):
+        client.get("x", ttl=0)
+    ft.now += 86_000
+    with pytest.raises(OpenDotaError, match="400s more"):
+        client.get("x", ttl=0)
+    assert route.call_count == 1
+    ft.now += 400
+    assert client.get("x", ttl=0) == 1
+
+
+@respx.mock
+def test_429_without_retry_after_waits_at_most_a_minute(client, ft):
+    respx.get(f"{BASE}/x").mock(return_value=httpx.Response(429))
+    with pytest.raises(OpenDotaError, match="gave up"):
+        client.get("x", ttl=0)
+    assert ft.slept == [30.0, 60.0, 60.0]  # and none after the last attempt
+
+
+class ParkFirstWait:
+    """A sleep that holds the first caller until released and only records the waits after it."""
+
+    def __init__(self) -> None:
+        self.parked = threading.Event()
+        self.release = threading.Event()
+        self.later: list[float] = []
+
+    def __call__(self, seconds: float) -> None:
+        if self.parked.is_set():
+            self.later.append(seconds)
+        else:
+            self.parked.set()
+            self.release.wait(10)
+
+
+def _second_call_while_first_waits(client: OpenDotaClient, sleep: ParkFirstWait) -> object:
+    """Start get("a") on a thread; while it waits, run get("b") on another and return its result."""
+    first = threading.Thread(target=client.get, args=("a",), kwargs={"ttl": 0}, daemon=True)
+    first.start()
+    assert sleep.parked.wait(5)
+    result: list[object] = []
+    second = threading.Thread(target=lambda: result.append(client.get("b", ttl=0)), daemon=True)
+    second.start()
+    second.join(5)
+    stalled = second.is_alive()
+    sleep.release.set()
+    first.join(5)
+    assert not stalled, "the second caller could not send its request while the first one waited"
+    return result[0]
+
+
+@respx.mock
+def test_waiting_out_the_minute_quota_does_not_stall_other_callers(tmp_path, ft):
+    sleep = ParkFirstWait()
+    client = OpenDotaClient(
+        cache_dir=tmp_path, min_interval=1.0, clock=ft.clock, wall_clock=ft.clock, sleep=sleep
+    )
+    spent = {"X-Rate-Limit-Remaining-Minute": "1"}
+    respx.get(f"{BASE}/x").mock(return_value=httpx.Response(200, json=0, headers=spent))
+    respx.get(f"{BASE}/a").mock(return_value=httpx.Response(200, json=1))
+    respx.get(f"{BASE}/b").mock(return_value=httpx.Response(200, json=2))
+    client.get("x", ttl=0)
+    assert _second_call_while_first_waits(client, sleep) == 2
+    assert sleep.later == [61.0]  # its slot still comes after the first caller's
+
+
+@respx.mock
+def test_429_makes_other_callers_wait_too(tmp_path, ft):
+    sleep = ParkFirstWait()
+    client = OpenDotaClient(
+        cache_dir=tmp_path, min_interval=1.0, clock=ft.clock, wall_clock=ft.clock, sleep=sleep
+    )
+    respx.get(f"{BASE}/a").mock(
+        side_effect=[httpx.Response(429, headers={"Retry-After": "20"}), httpx.Response(200, json=1)]
+    )
+    respx.get(f"{BASE}/b").mock(return_value=httpx.Response(200, json=2))
+    assert _second_call_while_first_waits(client, sleep) == 2
+    assert sleep.later == [21.0]  # the Retry-After, then one slot after the first caller's retry
 
 
 @respx.mock

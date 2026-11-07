@@ -7,7 +7,7 @@ from dataclasses import asdict
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from d2bg import __version__, paths
 from d2bg.api.services import RefreshJob, Services, services
@@ -18,6 +18,8 @@ from d2bg.profile import service as profile_service
 
 router = APIRouter(prefix="/api")
 Svc = Annotated[Services, Depends(services)]
+# A third of the free daily allowance (about 3,000 requests); the CLI can still ask for more.
+MAX_REFRESH_CALLS = 1000
 
 
 def _account(svc: Services, account_id: int | None) -> int:
@@ -131,7 +133,7 @@ def data_status(svc: Svc) -> dict[str, Any]:
 
 class RefreshBody(BaseModel):
     steps: list[str] | None = None
-    max_calls: int = 300
+    max_calls: int = Field(default=300, ge=1, le=MAX_REFRESH_CALLS)
 
 
 @router.post("/data/refresh")

@@ -1,18 +1,26 @@
 """HTTP server that receives Dota 2 Game State Integration data."""
+import hmac
 import json
 import time
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Callable, Optional
 
-from logic.gsi_installer import GSI_AUTH_TOKEN
+MAX_BODY_BYTES = 1024 * 1024
 
 
 class _GSIHandler(BaseHTTPRequestHandler):
     """Handler for GSI POST requests."""
 
     def do_POST(self):
-        content_length = int(self.headers.get("Content-Length", 0))
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            content_length = -1
+        if not 0 <= content_length <= MAX_BODY_BYTES:
+            self.send_response(413 if content_length > MAX_BODY_BYTES else 400)
+            self.end_headers()
+            return
         body = self.rfile.read(content_length)
         try:
             data = json.loads(body.decode("utf-8"))
@@ -50,7 +58,7 @@ class GSIServer:
     """Receives Dota 2 Game State Integration data via HTTP POST.
 
     Usage:
-        server = GSIServer(port=4001, on_update=my_callback)
+        server = GSIServer(port=4001, on_update=my_callback, expected_auth_token=load_or_create_token())
         server.start()
         # ... server runs in background thread ...
         server.stop()
@@ -60,8 +68,10 @@ class GSIServer:
         self,
         port: int = 4001,
         on_update: Optional[Callable] = None,
-        expected_auth_token: Optional[str] = GSI_AUTH_TOKEN,
+        *,
+        expected_auth_token: Optional[str],
     ):
+        """``expected_auth_token`` is the token in the installed GSI config; None turns the check off."""
         self.port = port
         self.on_update = on_update
         self.expected_auth_token = expected_auth_token
@@ -81,7 +91,9 @@ class GSIServer:
             return False, "missing auth block"
 
         token = auth.get("token")
-        if token != self.expected_auth_token:
+        if not isinstance(token, str) or not hmac.compare_digest(
+            token.encode("utf-8"), self.expected_auth_token.encode("utf-8")
+        ):
             return False, "invalid auth token"
 
         return True, "ok"
@@ -116,17 +128,17 @@ class GSIServer:
     def start(self):
         """Start the GSI server in a background thread.
 
-        Binds to 0.0.0.0 (all interfaces) so it works regardless of
-        whether the GSI config uses 'localhost' or '127.0.0.1'.
+        Binds to 127.0.0.1 only: the installed GSI config posts there, and
+        nothing on the network should be able to send game state.
         """
-        self._server = HTTPServer(("0.0.0.0", self.port), _GSIHandler)
+        self._server = HTTPServer(("127.0.0.1", self.port), _GSIHandler)
         self._server.gsi_callback = self._handle_data
         self._server.gsi_validate_auth = self._validate_auth
         self._server._update_count = 0
         self._server._last_update_time = "never"
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
-        print(f"[GSI] Server listening on http://0.0.0.0:{self.port}")
+        print(f"[GSI] Server listening on http://127.0.0.1:{self.port}")
         print(f"[GSI] Verify it's running: open http://127.0.0.1:{self.port} in your browser")
         if self.expected_auth_token:
             print("[GSI] Auth validation enabled")
